@@ -1,0 +1,12 @@
+node_modules/
+.next/
+*.tar.gz
+.env
+.env.local
+azure-builder.py
+worklog.md
+skills/
+download/
+data/denials.json
+*.secret
+.vercel
