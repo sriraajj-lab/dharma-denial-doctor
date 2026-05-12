@@ -27,6 +27,7 @@ const navItems: Array<{ view: ViewType; label: string; icon: React.ReactNode; se
   { view: 'worklist' as any, label: 'AI Worklist', icon: <Activity className="h-5 w-5" />, section: 'main' },
   { view: 'agents', label: 'AI Agents', icon: <Bot className="h-5 w-5" />, section: 'main' },
   { view: 'nl-query' as any, label: 'Search', icon: <Bot className="h-5 w-5" />, section: 'main' },
+  { view: 'health-scan' as any, label: 'Health Scan', icon: <Shield className="h-5 w-5" />, section: 'main' },
   { view: 'appeals', label: 'Appeals', icon: <Gavel className="h-5 w-5" />, section: 'management' },
   { view: 'followup' as any, label: 'Follow-ups', icon: <Activity className="h-5 w-5" />, section: 'management' },
   { view: 'appeal-deadlines' as any, label: 'Deadlines', icon: <Activity className="h-5 w-5" />, section: 'management' },

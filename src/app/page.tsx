@@ -19,6 +19,7 @@ import { PayerRulesView } from '@/components/payer-rules-view';
 import { AuditLogView } from '@/components/audit-log-view';
 import { ScrubView } from '@/components/scrub-view';
 import { FinancialsView } from '@/components/financials-view';
+import { HealthScanView } from '@/components/health-scan-view';
 import { Shield, User } from 'lucide-react';
 
 export default function Home() {
@@ -48,6 +49,8 @@ export default function Home() {
         return <StaffMetricsView />;
       case 'nl-query':
         return <NLQueryView />;
+      case 'health-scan':
+        return <HealthScanView />;
       case 'overview-report':
         return <OverviewReportPlaceholder />;
       case 'appeals':
