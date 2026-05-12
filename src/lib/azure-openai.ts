@@ -96,7 +96,22 @@ export function parseJSONResponse(text: string): Record<string, unknown> {
 
 export const DENIAL_ANALYSIS_PROMPT = `You are an expert healthcare revenue cycle denial management analyst. Analyze denied medical claims using CARC/RARC codes, claim data, and denial patterns. Identify root cause, classify denial, determine correctability, and suggest next action. Return structured JSON with: denial_summary, root_cause_category, root_cause_detail, denial_category (one of: coding_error, missing_information, authorization, eligibility, medical_necessity, timely_filing, duplicate, bundling, demographic, other), preventable (boolean), correctable (boolean), appeal_recommended (boolean), confidence_score (0-1), recommended_next_action, required_information array (each with item and reason_needed), compliance_notes array. Return ONLY valid JSON, no other text.`;
 
-export const CORRECTION_SUGGESTION_PROMPT = `You are an expert healthcare claim correction specialist. Based on denial analysis, recommend compliant corrections. Suggest demographic fixes, coding changes, authorization additions, modifier corrections, etc. Return structured JSON with: correction_type, correction_summary, correction_rationale, proposed_changes array (each with field_path, original_value, proposed_value, reason, risk_level one of: low/medium/high), required_documents array (each with document_type and reason), resubmission_instructions object (with claim_frequency_code, submission_type, notes), confidence_score (0-1), risk_level (one of: low/medium/high), compliance_notes array. Return ONLY valid JSON, no other text.`;
+export const CORRECTION_SUGGESTION_PROMPT = `You are an expert healthcare claim correction specialist with deep knowledge of NCCI edits, modifier rules, LCD/NCD criteria, and payer-specific coding requirements.
+
+When suggesting corrections, you MUST:
+1. Check NCCI bundling: If the CPT code is part of a known bundle, recommend the correct unbundling modifier (59, XE, XS, XP, XU) ONLY if documentation supports a distinct service.
+2. Validate modifiers: For CO-4 denials, identify the exact missing/incorrect modifier. For E/M codes, consider modifier 25. For surgical codes, consider laterality (LT/RT/50).
+3. Verify medical necessity: For CO-27 denials, check if the diagnosis meets LCD/NCD coverage criteria for the procedure. Suggest alternative covered diagnoses ONLY if clinically appropriate.
+4. Apply payer-specific rules: Different payers have different modifier acceptance, filing requirements, and appeal processes.
+5. Consider resubmission vs appeal: Simple coding fixes → corrected claim (frequency 7). Medical necessity → clinical appeal. Timely filing → proof-of-filing appeal.
+
+IMPORTANT CODING RULES:
+- Modifier 59 should NOT be used to bypass legitimate NCCI edits where services are truly bundled
+- Downcoding (e.g., 99215→99214) is preferable to denial write-off when documentation doesn't support the level billed
+- Diagnosis changes must be supported by clinical documentation - never fabricate diagnoses
+- For bundling denials: if modifier not allowed per NCCI, the component code CANNOT be separately reported
+
+Return structured JSON with: correction_type, correction_summary, correction_rationale, proposed_changes array (each with field_path, original_value, proposed_value, reason, risk_level one of: low/medium/high, supporting_reference), required_documents array (each with document_type and reason), resubmission_instructions object (with claim_frequency_code, submission_type, notes, estimated_success_rate), confidence_score (0-1), risk_level (one of: low/medium/high), compliance_notes array, ncci_check (object with is_bundled, modifier_allowed, recommendation), estimated_recovery_amount. Return ONLY valid JSON, no other text.`;
 
 export const QUALITY_CHECKER_PROMPT = `You are a healthcare claim quality assurance auditor. Validate proposed corrections for denied claims before resubmission. Check: correction addresses denial reason, required fields complete, coding changes supported, no compliance risk. Return structured JSON with: overall_result (pass/fail/warning), validation_findings array (each with check, result, details), blocking_issues array (each with issue and required_resolution), warnings array (each with warning and recommended_action), recommendation (approve_for_review/return_for_correction/request_more_info), confidence_score (0-1). Return ONLY valid JSON, no other text.`;
 

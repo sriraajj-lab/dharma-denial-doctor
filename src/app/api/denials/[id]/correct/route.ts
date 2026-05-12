@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDenialById, updateDenial } from '@/lib/data';
 import { callAzureOpenAI, parseJSONResponse, CORRECTION_SUGGESTION_PROMPT } from '@/lib/azure-openai';
 import { CorrectionSuggestion, Denial } from '@/lib/types';
+import { analyzeAndCorrectCoding, getCARCSpecificGuidance } from '@/lib/coding-intelligence';
+import { predictResubmissionSuccess } from '@/lib/resubmission-intelligence';
 
 export async function POST(
   request: NextRequest,
@@ -18,6 +20,11 @@ export async function POST(
       return NextResponse.json({ error: 'Denial must be analyzed before correction suggestions can be generated' }, { status: 400 });
     }
 
+    // Run smart coding intelligence first to enrich the AI prompt
+    const codingIntelligence = analyzeAndCorrectCoding(denial);
+    const carcGuidance = getCARCSpecificGuidance(denial.carcCode);
+    const prediction = predictResubmissionSuccess(denial, codingIntelligence.corrections[0]?.type || 'review_required');
+
     const contextData = JSON.stringify({
       claimNumber: denial.claimNumber,
       cptCode: denial.cptCode,
@@ -27,13 +34,31 @@ export async function POST(
       deniedAmount: denial.deniedAmount,
       carcCode: denial.carcCode,
       rarcCode: denial.rarcCode,
+      payerName: denial.payerName,
       analysis: denial.analysis,
+      // Enhanced context from coding intelligence
+      codingIntelligence: {
+        ncciFindings: codingIntelligence.ncciFindings,
+        modifierSuggestions: codingIntelligence.modifierSuggestions,
+        coverageAnalysis: codingIntelligence.coverageAnalysis,
+        suggestedCorrections: codingIntelligence.corrections,
+        resubmissionStrategy: codingIntelligence.resubmissionStrategy,
+      },
+      carcGuidance: {
+        commonFixes: carcGuidance.commonFixes,
+        historicalSuccessRate: carcGuidance.successRate,
+      },
+      predictionData: {
+        predictedSuccessRate: prediction.predictedSuccessRate,
+        recommendation: prediction.recommendation,
+        alternativeStrategies: prediction.alternativeStrategies,
+      },
     });
 
     let correction: CorrectionSuggestion;
 
     try {
-      const responseText = await callAzureOpenAI(CORRECTION_SUGGESTION_PROMPT, `Based on the denial analysis, suggest corrections for this claim:\n${contextData}`);
+      const responseText = await callAzureOpenAI(CORRECTION_SUGGESTION_PROMPT, `Based on the denial analysis and coding intelligence data, suggest corrections for this claim:\n${contextData}`);
       const parsed = parseJSONResponse(responseText);
 
       correction = {
