@@ -8,6 +8,12 @@ import { DenialDetailView } from '@/components/denial-detail-view';
 import { UploadView } from '@/components/upload-view';
 import { AgentsView } from '@/components/agents-view';
 import { OverviewReportView } from '@/components/overview-report-view';
+import { WorklistView } from '@/components/worklist-view';
+import { PreventionDashboard } from '@/components/prevention-dashboard';
+import { FollowUpView } from '@/components/followup-view';
+import { AppealDeadlinesView } from '@/components/appeal-deadlines-view';
+import { StaffMetricsView } from '@/components/staff-metrics-view';
+import { NLQueryView } from '@/components/nl-query-view';
 import { AppealsView } from '@/components/appeals-view';
 import { PayerRulesView } from '@/components/payer-rules-view';
 import { AuditLogView } from '@/components/audit-log-view';
@@ -30,6 +36,18 @@ export default function Home() {
         return <UploadView />;
       case 'agents':
         return <AgentsView />;
+      case 'worklist':
+        return <WorklistView />;
+      case 'prevention':
+        return <PreventionDashboard />;
+      case 'followup':
+        return <FollowUpView />;
+      case 'appeal-deadlines':
+        return <AppealDeadlinesView />;
+      case 'staff-metrics':
+        return <StaffMetricsView />;
+      case 'nl-query':
+        return <NLQueryView />;
       case 'overview-report':
         return <OverviewReportPlaceholder />;
       case 'appeals':
