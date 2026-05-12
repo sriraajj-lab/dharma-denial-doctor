@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { Denial } from './types';
 import sampleDenials from './sample-data';
+import { calculateFilingDeadline } from './payer-rules';
 
 // In-memory store for Vercel serverless (fs.writeFileSync doesn't work on Vercel)
 let memoryStore: Denial[] | null = null;
@@ -77,9 +78,32 @@ export function bulkCreateDenials(newDenials: Array<Omit<Denial, 'id' | 'created
   const denials = initializeData();
   const created: Denial[] = [];
   for (const denialData of newDenials) {
+    // Calculate filing deadline
+    let filingDeadline: string | undefined;
+    let filingDeadlineDays: number | undefined;
+    let isTimelyFilingRisk = false;
+
+    try {
+      const deadlineInfo = calculateFilingDeadline(
+        denialData.payerName || '',
+        denialData.dateOfService || '',
+        denialData.denialDate || ''
+      );
+      if (deadlineInfo.deadline) {
+        filingDeadline = deadlineInfo.deadline.toISOString();
+        filingDeadlineDays = deadlineInfo.daysRemaining || undefined;
+        isTimelyFilingRisk = deadlineInfo.isAtRisk;
+      }
+    } catch {
+      // Skip deadline calculation on error
+    }
+
     const newDenial: Denial = {
       ...denialData,
       id: `DEN-${String(denials.length + 1).padStart(3, '0')}`,
+      filingDeadline,
+      filingDeadlineDays,
+      isTimelyFilingRisk,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

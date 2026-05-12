@@ -1,8 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Denial Management System - Full RCM Schema
+// Covers: denials, analyses, appeals, audit logs, users/roles, payer rules,
+// notes, financial tracking, and claim scrubbing
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +11,357 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── USERS & AUTHENTICATION ────────────────────────────────────────────────────
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String?
+  passwordHash   String
+  role           String    @default("biller") // admin, manager, biller, coder, client
+  department     String?
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  auditLogs      AuditLog[]
+  notes          DenialNote[]
+  appeals        AppealLetter[]
+  assignments    DenialAssignment[]
+  sessions       Session[]
 }
 
-model Post {
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── DENIALS ────────────────────────────────────────────────────────────────────
+
+model Denial {
+  id                  String   @id @default(cuid())
+  claimNumber         String   @unique
+  patientName         String
+  patientDOB          String
+  patientMemberId     String?
+  payerName           String
+  payerId             String
+  providerNPI         String
+  providerName        String?
+  facilityName        String?
+  dateOfService       String
+  denialDate          String
+  cptCode             String
+  modifier            String?
+  diagnosisCode       String
+  diagnosisCode2      String?
+  diagnosisCode3      String?
+  diagnosisCode4      String?
+  billedAmount        Float
+  deniedAmount        Float
+  allowedAmount       Float?
+  paidAmount          Float?
+  carcCode            String
+  rarcCode            String?
+  adjustmentGroupCode String
+  denialCategory      String   @default("other")
+  status              String   @default("New") // New, Analyzed, Corrected, Reviewed, Resubmitted, Appealed, Closed
+  priority            String   @default("normal") // low, normal, high, critical
+  filingDeadline      DateTime?
+  filingDeadlineDays  Int?
+  isTimelyFilingRisk  Boolean  @default(false)
+  batchId             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  analysis       DenialAnalysis?
+  correction     CorrectionSuggestion?
+  qualityCheck   QualityCheck?
+  appeals        AppealLetter[]
+  notes          DenialNote[]
+  auditLogs      AuditLog[]
+  assignments    DenialAssignment[]
+  financials     FinancialTracking[]
+  scrubResults   ClaimScrubResult[]
+}
+
+model DenialAnalysis {
+  id                    String   @id @default(cuid())
+  denialId              String   @unique
+  denialSummary         String
+  rootCauseCategory     String
+  rootCauseDetail       String
+  denialCategory        String
+  preventable           Boolean  @default(true)
+  correctable           Boolean  @default(true)
+  appealRecommended     Boolean  @default(false)
+  confidenceScore       Float    @default(0.5)
+  recommendedNextAction String
+  requiredInformation   String   @default("[]") // JSON array
+  complianceNotes       String   @default("[]") // JSON array
+  analyzedAt            DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  denial Denial @relation(fields: [denialId], references: [id], onDelete: Cascade)
+}
+
+model CorrectionSuggestion {
+  id                      String   @id @default(cuid())
+  denialId                String   @unique
+  correctionType          String
+  correctionSummary       String
+  correctionRationale     String
+  proposedChanges         String   @default("[]") // JSON array
+  requiredDocuments       String   @default("[]") // JSON array
+  resubmissionInstructions String  @default("{}") // JSON object
+  confidenceScore         Float    @default(0.5)
+  riskLevel               String   @default("medium") // low, medium, high
+  complianceNotes         String   @default("[]") // JSON array
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  denial Denial @relation(fields: [denialId], references: [id], onDelete: Cascade)
+}
+
+model QualityCheck {
+  id                String   @id @default(cuid())
+  denialId          String   @unique
+  overallResult     String   @default("warning") // pass, fail, warning
+  validationFindings String  @default("[]") // JSON array
+  blockingIssues    String   @default("[]") // JSON array
+  warnings          String   @default("[]") // JSON array
+  recommendation    String   @default("request_more_info")
+  confidenceScore   Float    @default(0.5)
+  checkedAt         DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  denial Denial @relation(fields: [denialId], references: [id], onDelete: Cascade)
+}
+
+// ─── APPEAL LETTERS ─────────────────────────────────────────────────────────────
+
+model AppealLetter {
+  id              String   @id @default(cuid())
+  denialId        String
+  appealType      String   @default("first_level") // first_level, second_level, external_review
+  status          String   @default("draft") // draft, pending_review, sent, accepted, denied, expired
+  letterContent   String   // Full appeal letter text (markdown)
+  supportingDocs  String   @default("[]") // JSON array of document references
+  recipientName   String?
+  recipientFax    String?
+  recipientAddress String?
+  sentAt          DateTime?
+  responseDate    DateTime?
+  responseNotes   String?
+  deadline        DateTime?
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  denial    Denial @relation(fields: [denialId], references: [id], onDelete: Cascade)
+  createdBy User   @relation(fields: [createdById], references: [id])
+
+  @@index([denialId])
+  @@index([status])
+}
+
+// ─── NOTES & COMMENTS ───────────────────────────────────────────────────────────
+
+model DenialNote {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
+  denialId  String
   authorId  String
+  content   String
+  noteType  String   @default("general") // general, internal, escalation, payer_contact, resolution
+  isPinned  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  denial Denial @relation(fields: [denialId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([denialId])
+}
+
+// ─── AUDIT TRAIL ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  denialId    String?
+  action      String   // create, update, delete, view, analyze, correct, appeal, export, login, logout
+  entityType  String   // denial, appeal, note, user, payer_rule, report
+  entityId    String?
+  oldValues   String?  // JSON of previous values
+  newValues   String?  // JSON of new values
+  ipAddress   String?
+  userAgent   String?
+  metadata    String?  // JSON additional context
+  createdAt   DateTime @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id])
+  denial Denial? @relation(fields: [denialId], references: [id])
+
+  @@index([userId])
+  @@index([denialId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ─── PAYER RULES ENGINE ─────────────────────────────────────────────────────────
+
+model PayerRule {
+  id                  String   @id @default(cuid())
+  payerName           String
+  payerId             String?
+  ruleType            String   // filing_deadline, auth_required, modifier_rules, bundling, documentation
+  ruleName            String
+  description         String?
+  conditions          String   @default("{}") // JSON conditions (cptCode patterns, diagnosis patterns, etc.)
+  filingDeadlineDays  Int?     // Days from DOS or denial date for timely filing
+  appealDeadlineDays  Int?     // Days allowed for appeal submission
+  requiresAuth        Boolean  @default(false)
+  contactPhone        String?
+  contactFax          String?
+  contactEmail        String?
+  contactAddress      String?
+  portalUrl           String?
+  notes               String?
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([payerName])
+  @@index([ruleType])
+}
+
+// ─── FINANCIAL TRACKING ─────────────────────────────────────────────────────────
+
+model FinancialTracking {
+  id                String   @id @default(cuid())
+  denialId          String
+  eventType         String   // resubmission, partial_payment, full_payment, write_off, adjustment, refund
+  amount            Float
+  checkNumber       String?
+  eraTraceNumber    String?
+  paymentDate       DateTime?
+  postingDate       DateTime?
+  notes             String?
+  createdAt         DateTime @default(now())
+
+  denial Denial @relation(fields: [denialId], references: [id], onDelete: Cascade)
+
+  @@index([denialId])
+  @@index([eventType])
+}
+
+// ─── DENIAL ASSIGNMENT / WORKLIST ───────────────────────────────────────────────
+
+model DenialAssignment {
+  id          String    @id @default(cuid())
+  denialId    String
+  assignedTo  String
+  assignedBy  String?
+  status      String    @default("active") // active, completed, reassigned
+  dueDate     DateTime?
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  denial     Denial @relation(fields: [denialId], references: [id], onDelete: Cascade)
+  assignee   User   @relation(fields: [assignedTo], references: [id])
+
+  @@index([denialId])
+  @@index([assignedTo])
+}
+
+// ─── CLAIM SCRUBBING / DENIAL PREVENTION ────────────────────────────────────────
+
+model ClaimScrubRule {
+  id          String   @id @default(cuid())
+  ruleName    String
+  ruleType    String   // coding_validation, modifier_check, diagnosis_match, auth_required, ncd_lcd, bundling
+  description String?
+  conditions  String   @default("{}") // JSON: CPT ranges, diagnosis codes, payer patterns
+  action      String   @default("warn") // warn, block, auto_correct
+  severity    String   @default("medium") // low, medium, high, critical
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ClaimScrubResult {
+  id          String   @id @default(cuid())
+  denialId    String?  // Can be linked to a denial for prevention tracking
+  claimNumber String?
+  ruleId      String?
+  ruleName    String
+  ruleType    String
+  severity    String   @default("medium")
+  finding     String   // What was found
+  suggestion  String?  // How to fix it
+  status      String   @default("open") // open, resolved, ignored
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  denial Denial? @relation(fields: [denialId], references: [id])
+
+  @@index([denialId])
+  @@index([status])
+}
+
+// ─── OVERVIEW REPORTS ───────────────────────────────────────────────────────────
+
+model OverviewReport {
+  id                  String   @id @default(cuid())
+  fileName            String
+  uploadDate          DateTime @default(now())
+  totalClaims         Int
+  totalDeniedAmount   Float
+  overallRating       Float
+  ratingLabel         String
+  ratingColor         String
+  executiveSummary    String
+  keyIssues           String   @default("[]") // JSON array
+  categoryBreakdown   String   @default("[]") // JSON array
+  payerBreakdown      String   @default("[]") // JSON array
+  recoveryPotential   String   @default("{}") // JSON object
+  topDenialReasons    String   @default("[]") // JSON array
+  recommendations     String   @default("[]") // JSON array
+  contractStatus      String   @default("unsigned") // unsigned, signed, expired
+  signedAt            DateTime?
+  signedBy            String?
+  importedDenialIds   String   @default("[]") // JSON array
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// ─── BATCH PROCESSING ───────────────────────────────────────────────────────────
+
+model BatchJob {
+  id            String   @id @default(cuid())
+  jobType       String   // analyze, correct, quality_check, appeal_generate
+  status        String   @default("pending") // pending, running, completed, failed, cancelled
+  totalItems    Int      @default(0)
+  processedItems Int     @default(0)
+  failedItems   Int      @default(0)
+  denialIds     String   @default("[]") // JSON array of denial IDs to process
+  results       String   @default("[]") // JSON array of results per item
+  errorLog      String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([jobType])
 }

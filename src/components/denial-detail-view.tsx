@@ -16,6 +16,10 @@ import {
   RefreshCw,
   AlertCircle,
   Info,
+  Zap,
+  Users,
+  MessageSquare,
+  Gavel,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +28,10 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { useAppStore } from '@/lib/store';
 import { toast } from 'sonner';
+import { SmartCorrectionPanel } from './smart-correction-panel';
+import { EligibilityPanel } from './eligibility-panel';
+import { NotesPanel } from './notes-panel';
+import { AppealPanel } from './appeal-panel';
 
 const STATUS_COLORS: Record<string, string> = {
   New: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -31,6 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
   Corrected: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
   Reviewed: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
   Resubmitted: 'bg-green-500/20 text-green-400 border-green-500/30',
+  Appealed: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
   Closed: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
 };
 
@@ -59,7 +68,7 @@ export function DenialDetailView() {
   const [analyzing, setAnalyzing] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [qualityChecking, setQualityChecking] = useState(false);
-  const [activeTab, setActiveTab] = useState<'analysis' | 'correction' | 'quality'>('analysis');
+  const [activeTab, setActiveTab] = useState<'analysis' | 'correction' | 'quality' | 'smart-correct' | 'eligibility' | 'notes' | 'appeal'>('analysis');
   const { selectedDenialId, navigateBack } = useAppStore();
 
   useEffect(() => {
@@ -177,7 +186,7 @@ export function DenialDetailView() {
     );
   }
 
-  const workflowSteps = ['New', 'Analyzed', 'Corrected', 'Reviewed', 'Resubmitted', 'Closed'];
+  const workflowSteps = ['New', 'Analyzed', 'Corrected', 'Reviewed', 'Resubmitted', 'Appealed', 'Closed'];
   const currentStepIndex = workflowSteps.indexOf(denial.status);
 
   return (
@@ -319,7 +328,7 @@ export function DenialDetailView() {
         {/* Right: AI Panels */}
         <div className="lg:col-span-2 space-y-6">
           {/* Tab Selection */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => setActiveTab('analysis')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
@@ -337,12 +346,44 @@ export function DenialDetailView() {
               <Wrench className="h-4 w-4 inline mr-1" /> Correction
             </button>
             <button
+              onClick={() => setActiveTab('smart-correct')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                activeTab === 'smart-correct' ? 'bg-violet-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Zap className="h-4 w-4 inline mr-1" /> Smart Correct
+            </button>
+            <button
+              onClick={() => setActiveTab('eligibility')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                activeTab === 'eligibility' ? 'bg-teal-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Users className="h-4 w-4 inline mr-1" /> Eligibility
+            </button>
+            <button
               onClick={() => setActiveTab('quality')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
                 activeTab === 'quality' ? 'bg-emerald text-emerald-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
               }`}
             >
-              <ShieldCheck className="h-4 w-4 inline mr-1" /> Quality Check
+              <ShieldCheck className="h-4 w-4 inline mr-1" /> Quality
+            </button>
+            <button
+              onClick={() => setActiveTab('appeal')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                activeTab === 'appeal' ? 'bg-amber-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Gavel className="h-4 w-4 inline mr-1" /> Appeal
+            </button>
+            <button
+              onClick={() => setActiveTab('notes')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                activeTab === 'notes' ? 'bg-sky-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <MessageSquare className="h-4 w-4 inline mr-1" /> Notes
             </button>
           </div>
 
@@ -356,9 +397,29 @@ export function DenialDetailView() {
             <CorrectionPanel correction={denial.correction} isRunning={correcting} hasAnalysis={!!denial.analysis} />
           )}
 
+          {/* Smart Correction Panel */}
+          {activeTab === 'smart-correct' && (
+            <SmartCorrectionPanel denial={denial} />
+          )}
+
+          {/* Eligibility Resolution Panel */}
+          {activeTab === 'eligibility' && (
+            <EligibilityPanel denial={denial} />
+          )}
+
           {/* Quality Check Panel */}
           {activeTab === 'quality' && (
             <QualityCheckPanel qualityCheck={denial.qualityCheck} isRunning={qualityChecking} hasCorrection={!!denial.correction} />
+          )}
+
+          {/* Appeal Panel */}
+          {activeTab === 'appeal' && (
+            <AppealPanel denial={denial} />
+          )}
+
+          {/* Notes Panel */}
+          {activeTab === 'notes' && (
+            <NotesPanel denialId={denial.id} />
           )}
         </div>
       </div>
