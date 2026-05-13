@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Denial Doctor - AI-Powered RCM Platform",
-  description: "Denial Doctor - AI-powered Revenue Cycle Management Denial Management Platform",
+  description: "Denial Doctor - AI-Powered Revenue Cycle Management & Denial Resolution Platform",
   icons: {
     icon: "/logo.svg",
   },
