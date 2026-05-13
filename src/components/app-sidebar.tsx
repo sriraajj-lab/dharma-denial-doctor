@@ -58,8 +58,8 @@ export function AppSidebar() {
           <div className="flex items-center gap-2">
             <Shield className="h-7 w-7 text-primary" />
             <div>
-              <h1 className="text-sm font-bold text-sidebar-foreground">Denial Mgmt</h1>
-              <p className="text-[10px] text-muted-foreground">AI Agent - Phase 2</p>
+              <h1 className="text-sm font-bold text-sidebar-foreground">Denial Doctor</h1>
+              <p className="text-[10px] text-muted-foreground">AI-Powered RCM Platform</p>
             </div>
           </div>
         )}

@@ -80,9 +80,9 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
             <span className="text-sm font-medium text-foreground">
-              Denial Management Agent
+              Denial Doctor
             </span>
-            <span className="text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded ml-2">Phase 2</span>
+            <span className="text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded ml-2">AI-Powered</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">

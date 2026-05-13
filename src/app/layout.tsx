@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RCM Denial Management Agent",
-  description: "AI-powered Revenue Cycle Management Denial Management System - Phase 1",
+  title: "Denial Doctor - AI-Powered RCM Platform",
+  description: "Denial Doctor - AI-powered Revenue Cycle Management Denial Management Platform",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
 };
 

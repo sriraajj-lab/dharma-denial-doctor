@@ -138,7 +138,7 @@ export function DashboardView() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
-        <p className="text-muted-foreground mt-1">Revenue Cycle Denial Management Overview</p>
+        <p className="text-muted-foreground mt-1">Denial Doctor - Revenue Cycle Management Overview</p>
       </div>
 
       {/* KPI Cards */}

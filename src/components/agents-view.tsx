@@ -230,7 +230,7 @@ export function AgentsView() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Phase</span>
-                <span className="font-mono text-emerald">Phase 1 - Denial Management</span>
+                <span className="font-mono text-emerald">Denial Doctor - AI-Powered</span>
               </div>
             </div>
           </div>
