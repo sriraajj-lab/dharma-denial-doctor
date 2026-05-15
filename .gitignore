@@ -3,6 +3,7 @@ node_modules/
 *.tar.gz
 .env
 .env.local
+.env*.local
 azure-builder.py
 worklog.md
 skills/
@@ -10,3 +11,9 @@ download/
 data/denials.json
 *.secret
 .vercel
+*.db
+*.db-journal
+tsconfig.tsbuildinfo
+.zscripts/
+dev.log
+mini-services/

@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const denial = getDenialById(id);
+    const denial = await getDenialById(id);
     if (!denial) {
       return NextResponse.json({ error: 'Denial not found' }, { status: 404 });
     }
@@ -25,7 +25,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const denial = updateDenial(id, body);
+    const denial = await updateDenial(id, body);
     if (!denial) {
       return NextResponse.json({ error: 'Denial not found' }, { status: 404 });
     }

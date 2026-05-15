@@ -89,6 +89,7 @@ model Denial {
   assignments    DenialAssignment[]
   financials     FinancialTracking[]
   scrubResults   ClaimScrubResult[]
+  agentTasks     AgentTask[]
 }
 
 model DenialAnalysis {
@@ -364,4 +365,252 @@ model BatchJob {
 
   @@index([status])
   @@index([jobType])
+}
+
+// ─── AGENT ORCHESTRATION ────────────────────────────────────────────────────────
+
+model AgentTask {
+  id              String   @id @default(cuid())
+  agentName       String   // Which agent is handling this
+  taskType        String   // analyze, correct, triage, appeal, etc.
+  status          String   @default("pending") // pending, running, completed, failed, escalated
+  priority        String   @default("normal") // low, normal, high, critical
+  denialId        String?
+  input           String   @default("{}") // JSON task input
+  output          String?  // JSON task output
+  parentTaskId    String?  // For sub-tasks spawned by agents
+  sourceAgent     String?  // Agent that created this task
+  targetAgent     String?  // Agent that should handle this
+  toolsUsed       String   @default("[]") // JSON array of tool names used
+  confidenceScore Float?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  errorMessage    String?
+  retryCount      Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  denial   Denial?    @relation(fields: [denialId], references: [id])
+  parent   AgentTask? @relation("TaskHierarchy", fields: [parentTaskId], references: [id])
+  children AgentTask[] @relation("TaskHierarchy")
+
+  @@index([agentName])
+  @@index([status])
+  @@index([denialId])
+  @@index([priority])
+}
+
+model AgentMemory {
+  id          String   @id @default(cuid())
+  agentName   String
+  memoryType  String   // learning, pattern, preference, rule_update, insight
+  key         String   // Lookup key (e.g., "payer:UHC:CO-22:success_rate")
+  value       String   // JSON value
+  confidence  Float    @default(0.5)
+  sourceCount Int      @default(1) // How many observations contributed
+  lastUsedAt  DateTime @default(now())
+  expiresAt   DateTime? // Optional expiration for time-sensitive data
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([agentName, memoryType, key])
+  @@index([agentName])
+  @@index([memoryType])
+  @@index([key])
+}
+
+model AgentMessage {
+  id          String   @id @default(cuid())
+  fromAgent   String
+  toAgent     String
+  messageType String   // request, response, broadcast, escalation, tool_result
+  content     String   // JSON message content
+  denialId    String?
+  taskId      String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([toAgent, isRead])
+  @@index([fromAgent])
+  @@index([denialId])
+}
+
+// ─── PERSISTENT INTELLIGENCE ────────────────────────────────────────────────────
+
+model ResubmissionRecord {
+  id                  String   @id @default(cuid())
+  denialId            String
+  claimNumber         String
+  payerName           String
+  carcCode            String
+  denialCategory      String
+  cptCode             String
+  deniedAmount        Float
+  correctionType      String
+  correctionDetails   String
+  resubmittedAt       DateTime
+  outcome             String   @default("pending") // paid, partially_paid, denied_again, pending, appealed
+  paidAmount          Float?
+  resolvedAt          DateTime?
+  daysToResolution    Int?
+  deniedAgainReason   String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([payerName])
+  @@index([carcCode])
+  @@index([correctionType])
+  @@index([outcome])
+}
+
+model PayerBehaviorProfile {
+  id                    String   @id @default(cuid())
+  payerName             String   @unique
+  totalSubmissions      Int      @default(0)
+  successRate           Float    @default(0.5)
+  avgDaysToPayment      Int      @default(30)
+  avgRecoveryPercent    Float    @default(0)
+  bestCorrectionTypes   String   @default("[]") // JSON
+  worstCorrectionTypes  String   @default("[]") // JSON
+  topDenialReasons      String   @default("[]") // JSON
+  trendData             String   @default("{}") // JSON with lastMonth/last3Months/last6Months/improving
+  specialBehaviors      String   @default("{}") // JSON: payer-specific quirks, preferences, portal tips
+  lastAnalyzedAt        DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([payerName])
+}
+
+// ─── HIPAA COMPLIANCE ───────────────────────────────────────────────────────────
+
+model HIPAAAuditLog {
+  id              String   @id @default(cuid())
+  userId          String?
+  action          String   // phi_access, phi_export, phi_modify, phi_delete, phi_decrypt, login, logout, baa_event
+  entityType      String   // denial, appeal, report, user, system
+  entityId        String?
+  phiFieldsAccessed String? // JSON array of field names containing PHI
+  justification   String?  // Why PHI was accessed
+  accessLevel     String   @default("standard") // standard, elevated, emergency
+  ipAddress       String?
+  userAgent       String?
+  sessionId       String?
+  result          String   @default("success") // success, denied, error
+  denialReason    String?  // If access was denied, why
+  metadata        String?  // JSON additional context
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+model BAARecord {
+  id              String   @id @default(cuid())
+  vendorName      String
+  baaType         String   // cloud_provider, analytics, ai_service, clearinghouse, storage
+  status          String   @default("pending") // pending, active, expired, terminated
+  signedDate      DateTime?
+  expirationDate  DateTime?
+  contactName     String?
+  contactEmail    String?
+  documentUrl     String?
+  phiAccessScope  String   @default("[]") // JSON array of what PHI the vendor can access
+  securityMeasures String  @default("[]") // JSON array of required security measures
+  breachNotifDays Int      @default(60)  // Days to notify of breach
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([vendorName])
+  @@index([status])
+}
+
+model ComplianceCheck {
+  id              String   @id @default(cuid())
+  checkType       String   // hipaa_access, phi_encryption, audit_trail, baa_valid, data_retention, phi_minimization
+  status          String   @default("pending") // pending, passed, failed, warning
+  entityType      String?
+  entityId        String?
+  findings        String   @default("[]") // JSON array of findings
+  remediationSteps String  @default("[]") // JSON array of steps
+  checkedBy       String   @default("system") // system, agent name, or user ID
+  checkedAt       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([checkType])
+  @@index([status])
+}
+
+// ─── UNDERPAYMENT DETECTION ─────────────────────────────────────────────────────
+
+model UnderpaymentAlert {
+  id              String   @id @default(cuid())
+  denialId        String?
+  claimNumber     String
+  payerName       String
+  cptCode         String
+  billedAmount    Float
+  allowedAmount   Float
+  paidAmount      Float
+  expectedAmount  Float    // What should have been paid per contract/fee schedule
+  underpaidAmount Float
+  underpaymentPercent Float
+  reasonCode      String?
+  status          String   @default("open") // open, investigated, confirmed, disputed, resolved, false_positive
+  investigationNotes String?
+  resolutionAmount Float?
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([payerName])
+  @@index([status])
+}
+
+// ─── ROOT CAUSE PREVENTION ──────────────────────────────────────────────────────
+
+model PreventionRule {
+  id              String   @id @default(cuid())
+  ruleName        String
+  ruleType        String   // coding_prevention, filing_prevention, auth_prevention, eligibility_prevention
+  triggerConditions String @default("{}") // JSON: conditions that trigger this prevention rule
+  action          String   @default("warn") // warn, block, auto_correct, escalate
+  severity        String   @default("medium")
+  sourceAgent     String?  // Which agent created this rule
+  sourceInsight   String?  // The insight that led to this rule
+  isActive        Boolean  @default(true)
+  timesTriggered  Int      @default(0)
+  timesPrevented  Int      @default(0)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ruleType])
+  @@index([isActive])
+}
+
+// ─── HUMAN-IN-THE-LOOP ──────────────────────────────────────────────────────────
+
+model HumanApproval {
+  id              String   @id @default(cuid())
+  taskType        String   // correction_approval, appeal_approval, escalation, high_value_review, compliance_review
+  denialId        String?
+  agentName       String
+  requestedAction String   // JSON description of what agent wants to do
+  urgency         String   @default("normal") // low, normal, high, critical
+  status          String   @default("pending") // pending, approved, denied, expired, escalated
+  reviewedBy      String?
+  reviewNotes     String?
+  reviewedAt      DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([urgency])
+  @@index([agentName])
 }

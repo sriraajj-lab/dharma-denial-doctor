@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'denialId is required' }, { status: 400 });
     }
 
-    const denial = getDenialById(denialId);
+    const denial = await getDenialById(denialId);
     if (!denial) {
       return NextResponse.json({ error: 'Denial not found' }, { status: 404 });
     }
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Update denial status
-    updateDenial(denialId, { status: 'Appealed' });
+    await updateDenial(denialId, { status: 'Appealed' });
 
     createAuditLog({
       userId: currentUser.id,

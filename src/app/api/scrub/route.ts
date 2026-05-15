@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     // Single claim scrub
     if (denialId) {
-      const denial = getDenialById(denialId);
+      const denial = await getDenialById(denialId);
       if (!denial) {
         return NextResponse.json({ error: 'Denial not found' }, { status: 404 });
       }
@@ -34,9 +34,9 @@ export async function POST(request: NextRequest) {
 
     // Batch scrub
     if (denialIds && Array.isArray(denialIds)) {
-      const denials = denialIds
-        .map((id: string) => getDenialById(id))
-        .filter(Boolean);
+      const denials = (await Promise.all(
+        denialIds.map((id: string) => getDenialById(id))
+      )).filter(Boolean);
 
       const summary = scrubBatch(denials as any[]);
 
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Scrub all denials
-    const allDenials = getDenials();
+    const allDenials = await getDenials();
     const summary = scrubBatch(allDenials);
 
     createAuditLog({

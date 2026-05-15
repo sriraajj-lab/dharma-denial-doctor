@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(executeNLQuery(q));
     }
 
-    const stats = getDashboardStats();
+    const stats = await getDashboardStats();
     return NextResponse.json(stats);
   } catch (error) {
     console.error('Error fetching dashboard data:', error);

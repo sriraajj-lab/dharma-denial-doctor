@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'denialId and correctionType required' }, { status: 400 });
         }
 
-        const denial = getDenialById(denialId);
+        const denial = await getDenialById(denialId);
         if (!denial) {
           return NextResponse.json({ error: 'Denial not found' }, { status: 404 });
         }

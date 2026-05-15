@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const denial = getDenialById(id);
+    const denial = await getDenialById(id);
     if (!denial) {
       return NextResponse.json({ error: 'Denial not found' }, { status: 404 });
     }
@@ -68,7 +68,7 @@ export async function POST(
     }
 
     const newStatus = qualityCheck.recommendation === 'approve_for_review' ? 'Reviewed' : denial.status;
-    const updated = updateDenial(id, {
+    const updated = await updateDenial(id, {
       qualityCheck,
       status: newStatus as Denial['status'],
     });

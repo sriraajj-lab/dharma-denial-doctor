@@ -3,7 +3,7 @@ import { getDenials, createDenial } from '@/lib/data';
 
 export async function GET(request: NextRequest) {
   try {
-    const denials = getDenials();
+    const denials = await getDenials();
     const { searchParams } = new URL(request.url);
 
     let filtered = [...denials];
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const denial = createDenial(body);
+    const denial = await createDenial(body);
     return NextResponse.json(denial, { status: 201 });
   } catch (error) {
     console.error('Error creating denial:', error);

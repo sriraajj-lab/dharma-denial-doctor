@@ -91,7 +91,7 @@ async function processBatch(jobId: string, jobType: string, denialIds: string[])
     if (!job || job.status === 'cancelled') break;
 
     try {
-      const denial = getDenialById(denialId);
+      const denial = await getDenialById(denialId);
       if (!denial) {
         addBatchResult(jobId, { denialId, success: false, error: 'Denial not found' });
         continue;
@@ -145,7 +145,7 @@ async function processBatch(jobId: string, jobType: string, denialIds: string[])
         if (jobType === 'correct') updates.correction = { ...parsed, createdAt: new Date().toISOString() };
         if (jobType === 'quality_check') updates.qualityCheck = { ...parsed, checkedAt: new Date().toISOString() };
 
-        updateDenial(denialId, updates as any);
+        await updateDenial(denialId, updates as any);
         addBatchResult(jobId, { denialId, success: true });
       } catch (aiError) {
         // AI failed but we can still mark as processed with fallback

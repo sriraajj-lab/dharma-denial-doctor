@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const category = searchParams.get('category');
 
-    let denials = getDenials();
+    let denials = await getDenials();
 
     // Apply filters
     if (denialIds && denialIds.length > 0) {
