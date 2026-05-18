@@ -1,16 +1,31 @@
 import { create } from 'zustand';
-import { ViewType, OverviewReport, AppUser, BatchJob } from './types';
+import { ViewType, OverviewReport, AppUser, BatchJob, AccessLevel, PracticeType } from './types';
 
 interface AppState {
+  // Navigation
   currentView: ViewType;
   selectedDenialId: string | null;
   selectedReportId: string | null;
   sidebarOpen: boolean;
+
+  // Auth & Access
   contractSigned: boolean;
   currentUser: AppUser | null;
   sessionToken: string | null;
+
+  // Practice Type (Medical / Dental)
+  practiceType: PracticeType | null;
+
+  // Access Level (1, 2, 3)
+  accessLevel: AccessLevel | null;
+
+  // Batch Processing
   activeBatchJobs: BatchJob[];
+
+  // Notifications
   notifications: Notification[];
+
+  // Actions
   setCurrentView: (view: ViewType) => void;
   setSelectedDenialId: (id: string | null) => void;
   setSelectedReportId: (id: string | null) => void;
@@ -18,6 +33,8 @@ interface AppState {
   setContractSigned: (signed: boolean) => void;
   setCurrentUser: (user: AppUser | null) => void;
   setSessionToken: (token: string | null) => void;
+  setPracticeType: (type: PracticeType) => void;
+  setAccessLevel: (level: AccessLevel) => void;
   addBatchJob: (job: BatchJob) => void;
   updateBatchJob: (id: string, updates: Partial<BatchJob>) => void;
   addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => void;
@@ -37,13 +54,15 @@ interface Notification {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  currentView: 'upload',
+  currentView: 'landing',
   selectedDenialId: null,
   selectedReportId: null,
   sidebarOpen: true,
   contractSigned: false,
   currentUser: null,
   sessionToken: null,
+  practiceType: null,
+  accessLevel: null,
   activeBatchJobs: [],
   notifications: [],
 
@@ -59,6 +78,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setContractSigned: (signed) => set({ contractSigned: signed }),
   setCurrentUser: (user) => set({ currentUser: user }),
   setSessionToken: (token) => set({ sessionToken: token }),
+  setPracticeType: (type) => set({ practiceType: type }),
+  setAccessLevel: (level) => set({ accessLevel: level }),
 
   addBatchJob: (job) =>
     set((state) => ({ activeBatchJobs: [...state.activeBatchJobs, job] })),

@@ -2,11 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
-import { OverviewReport } from '@/lib/types';
+import { OverviewReport, LEVEL_CONFIGS } from '@/lib/types';
 import {
   Upload, FileText, CheckCircle2, AlertCircle, Loader2, Download,
   Shield, TrendingUp, AlertTriangle, XCircle, ArrowRight, Lock,
-  Unlock, FileSignature, BarChart3, ChevronRight, Eye,
+  Unlock, FileSignature, BarChart3, Eye, Stethoscope, Heart,
+  Package, CreditCard, Percent, Clock, Zap,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,8 +29,7 @@ export function UploadView() {
   const [report, setReport] = useState<OverviewReport | null>(null);
   const [signing, setSigning] = useState(false);
   const [signerName, setSignerName] = useState('');
-  const [showContract, setShowContract] = useState(false);
-  const { navigateToReport, setCurrentView, setContractSigned } = useAppStore();
+  const { navigateToReport, setCurrentView, setContractSigned, practiceType, accessLevel } = useAppStore();
 
   const handleUpload = useCallback(async (file: File) => {
     if (!file.name.endsWith('.csv')) {
@@ -42,9 +42,10 @@ export function UploadView() {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('practiceType', practiceType || 'medical');
 
     try {
-      const res = await fetch('/api/upload/overview', {
+      const res = await fetch('/api/health-scan', {
         method: 'POST',
         body: formData,
       });
@@ -55,15 +56,15 @@ export function UploadView() {
         return;
       }
 
-      setReport(data.report);
-      toast.success(`Overview scan complete! ${data.imported} claims analyzed`);
+      setReport(data.report || data);
+      toast.success(`Overview scan complete! Claims analyzed`);
     } catch (error) {
       console.error('Upload error:', error);
       toast.error('Failed to upload file');
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [practiceType]);
 
   const handleSignContract = async () => {
     if (!report || !signerName.trim()) {
@@ -73,7 +74,7 @@ export function UploadView() {
 
     setSigning(true);
     try {
-      const res = await fetch('/api/upload/overview', {
+      const res = await fetch('/api/health-scan', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -122,20 +123,33 @@ export function UploadView() {
   }, [handleUpload]);
 
   const downloadSampleCSV = () => {
-    const headers = 'ClaimNumber,PatientName,PatientDOB,PayerName,PayerID,ProviderNPI,DateOfService,DenialDate,CPTCode,Modifier,DiagnosisCode,BilledAmount,DeniedAmount,CARCCode,RARCCode,AdjustmentGroupCode';
-    const row1 = 'CLM-2025-00001,John Smith,1985-03-15,Aetna,AET-54321,1234567890,2025-01-10,2025-01-25,99213,,J06.9,185.00,185.00,CO-16,N286,CO';
-    const row2 = 'CLM-2025-00002,Jane Doe,1970-07-22,UnitedHealthcare,UHC-87726,2345678901,2025-01-12,2025-01-28,27130,,M16.11,35000.00,35000.00,CO-50,N430,CO';
-    const row3 = 'CLM-2025-00003,Robert Johnson,1992-11-08,Cigna,CIG-12345,3456789012,2025-01-15,2025-02-01,99214,25,M54.5,250.00,250.00,CO-22,N57,CO';
-    const row4 = 'CLM-2025-00004,Mary Wilson,1958-05-30,Medicare,MCD-67890,4567890123,2025-01-20,2025-02-05,77067,,Z12.31,180.00,180.00,CO-27,N70,CO';
-    const row5 = 'CLM-2025-00005,James Brown,1980-09-14,Blue Cross Blue Shield,BCBS-11111,5678901234,2025-01-22,2025-02-08,29881,,J34.2,1200.00,1200.00,CO-4,N102,CO';
-    const csv = `${headers}\n${row1}\n${row2}\n${row3}\n${row4}\n${row5}`;
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'denial_report_sample.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    if (practiceType === 'dental') {
+      const headers = 'ClaimNumber,PatientName,PatientDOB,PayerName,PayerID,ProviderNPI,DateOfService,DenialDate,CDTCode,ToothNumber,DiagnosisCode,BilledAmount,DeniedAmount,CARCCode,RARCCode,AdjustmentGroupCode';
+      const row1 = 'CLM-2025-00001,John Smith,1985-03-15,Delta Dental,DD-54321,1234567890,2025-01-10,2025-01-25,D2391,14,K04.7,180.00,180.00,CO-96,N365,CO';
+      const row2 = 'CLM-2025-00002,Jane Doe,1970-07-22,Cigna Dental,CIG-87726,2345678901,2025-01-12,2025-01-28,D1110,,Z01.20,120.00,120.00,CO-97,N20,CO';
+      const row3 = 'CLM-2025-00003,Robert Johnson,1992-11-08,Guardian,GU-12345,3456789012,2025-01-15,2025-02-01,D2750,30,K04.5,950.00,950.00,CO-50,N197,CO';
+      const csv = `${headers}\n${row1}\n${row2}\n${row3}`;
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'dental_denial_report_sample.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const headers = 'ClaimNumber,PatientName,PatientDOB,PayerName,PayerID,ProviderNPI,DateOfService,DenialDate,CPTCode,Modifier,DiagnosisCode,BilledAmount,DeniedAmount,CARCCode,RARCCode,AdjustmentGroupCode';
+      const row1 = 'CLM-2025-00001,John Smith,1985-03-15,Aetna,AET-54321,1234567890,2025-01-10,2025-01-25,99213,,J06.9,185.00,185.00,CO-16,N286,CO';
+      const row2 = 'CLM-2025-00002,Jane Doe,1970-07-22,UnitedHealthcare,UHC-87726,2345678901,2025-01-12,2025-01-28,27130,,M16.11,35000.00,35000.00,CO-50,N430,CO';
+      const row3 = 'CLM-2025-00003,Robert Johnson,1992-11-08,Cigna,CIG-12345,3456789012,2025-01-15,2025-02-01,99214,25,M54.5,250.00,250.00,CO-22,N57,CO';
+      const csv = `${headers}\n${row1}\n${row2}\n${row3}`;
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'medical_denial_report_sample.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   // If we have a report, show the overview scan
@@ -143,28 +157,53 @@ export function UploadView() {
     return <OverviewScanView report={report} signing={signing} signerName={signerName} setSignerName={setSignerName} onSign={handleSignContract} onNavigateToDenials={() => setCurrentView('denials')} onNavigateToReport={() => navigateToReport(report.id)} />;
   }
 
+  const levelConfig = LEVEL_CONFIGS.find(l => l.level === accessLevel);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Upload Denial Report</h2>
-        <p className="text-muted-foreground mt-1">Upload a CSV denial report for instant AI-powered overview analysis</p>
+      {/* Header with practice type and level info */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Upload Denial Report</h2>
+          <p className="text-muted-foreground mt-1">
+            Upload a CSV denial report for instant AI-powered overview analysis
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className={practiceType === 'dental' ? 'bg-cyan/10 text-cyan border-cyan/30' : 'bg-primary/10 text-primary border-primary/30'}>
+            {practiceType === 'dental' ? <Heart className="h-3 w-3 mr-1" /> : <Stethoscope className="h-3 w-3 mr-1" />}
+            {practiceType === 'dental' ? 'Dental' : 'Medical'}
+          </Badge>
+          {levelConfig && (
+            <Badge variant="outline" className={levelConfig.bgColor + ' ' + levelConfig.color + ' ' + levelConfig.borderColor}>
+              L{levelConfig.level}: {levelConfig.name}
+            </Badge>
+          )}
+        </div>
       </div>
 
-      {/* Two-Step Process */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
+      {/* Level-based Process Flow */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className={`rounded-xl border-2 p-5 ${accessLevel && accessLevel >= 1 ? 'border-cyan/30 bg-cyan/5' : 'border-border bg-secondary/50'}`}>
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">1</div>
-            <h3 className="text-sm font-semibold text-foreground">Instant Overview Scan</h3>
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm ${accessLevel && accessLevel >= 1 ? 'bg-cyan/20 text-cyan' : 'bg-secondary text-muted-foreground'}`}>1</div>
+            <h3 className="text-sm font-semibold text-foreground">Scan & Score</h3>
           </div>
-          <p className="text-xs text-muted-foreground ml-11">AI analyzes your denial report and generates a client-facing overview with rating and key issues. No contract required.</p>
+          <p className="text-xs text-muted-foreground ml-11">AI analyzes your denial report and generates a client-facing overview with rating and key issues.</p>
         </div>
-        <div className="rounded-xl border border-border bg-secondary/50 p-5">
+        <div className={`rounded-xl border-2 p-5 ${accessLevel && accessLevel >= 2 ? 'border-emerald/30 bg-emerald/5' : 'border-border bg-secondary/50'}`}>
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground font-bold text-sm">2</div>
-            <h3 className="text-sm font-semibold text-foreground">Fix Claims (After Contract)</h3>
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm ${accessLevel && accessLevel >= 2 ? 'bg-emerald/20 text-emerald' : 'bg-secondary text-muted-foreground'}`}>2</div>
+            <h3 className="text-sm font-semibold text-foreground">Fix & Generate Report</h3>
           </div>
-          <p className="text-xs text-muted-foreground ml-11">Once the client signs a contract, unlock full denial management: analysis, correction, and resubmission.</p>
+          <p className="text-xs text-muted-foreground ml-11">AI works each claim, generates pre-auth letters, shows where to submit, and gives a complete report for manual execution.</p>
+        </div>
+        <div className={`rounded-xl border-2 p-5 ${accessLevel && accessLevel >= 3 ? 'border-primary/30 bg-primary/5' : 'border-border bg-secondary/50'}`}>
+          <div className="flex items-center gap-3 mb-2">
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm ${accessLevel && accessLevel >= 3 ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}>3</div>
+            <h3 className="text-sm font-semibold text-foreground">EHR Auto-Fix</h3>
+          </div>
+          <p className="text-xs text-muted-foreground ml-11">Agents fix everything automatically through EHR integration. Hands-free recovery.</p>
         </div>
       </div>
 
@@ -191,7 +230,9 @@ export function UploadView() {
                       <BarChart3 className="h-5 w-5 text-primary absolute -bottom-1 -right-1" />
                     </div>
                     <p className="mt-4 text-lg font-medium text-foreground">Running AI Overview Scan...</p>
-                    <p className="text-sm text-muted-foreground mt-1">Analyzing denial patterns with GPT-5.5</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Analyzing {practiceType === 'dental' ? 'dental' : 'medical'} denial patterns
+                    </p>
                     <Progress className="w-48 mt-4" value={66} />
                   </div>
                 ) : (
@@ -216,6 +257,24 @@ export function UploadView() {
             </CardContent>
           </Card>
 
+          {/* Batch Processing Info for 50K claims */}
+          <Card className="border-border bg-card">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Zap className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Handles 50,000 claims at once</p>
+                    <p className="text-xs text-muted-foreground">Chunked parallel processing with auto-scaling</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-emerald/10 text-emerald border-emerald/30 text-xs">
+                  <Clock className="h-3 w-3 mr-1" /> ~2-4 hrs for 50K
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Download Sample */}
           <Card className="border-border bg-card">
             <CardContent className="p-4">
@@ -223,8 +282,12 @@ export function UploadView() {
                 <div className="flex items-center gap-3">
                   <Download className="h-5 w-5 text-primary" />
                   <div>
-                    <p className="text-sm font-medium text-foreground">Download Sample CSV</p>
-                    <p className="text-xs text-muted-foreground">Get the required format template</p>
+                    <p className="text-sm font-medium text-foreground">
+                      Download {practiceType === 'dental' ? 'Dental' : 'Medical'} Sample CSV
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {practiceType === 'dental' ? 'CDT code format with tooth numbers' : 'CPT code format with modifiers'}
+                    </p>
                   </div>
                 </div>
                 <Button variant="outline" size="sm" onClick={downloadSampleCSV} className="border-primary/30 text-primary">
@@ -239,10 +302,12 @@ export function UploadView() {
         <div className="space-y-6">
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold">Required CSV Format</CardTitle>
+              <CardTitle className="text-base font-semibold">
+                Required CSV Format ({practiceType === 'dental' ? 'Dental CDT' : 'Medical CPT'})
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-4">
-              <div className="max-h-96 overflow-y-auto custom-scrollbar">
+              <div className="max-h-96 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border">
@@ -251,7 +316,24 @@ export function UploadView() {
                     </tr>
                   </thead>
                   <tbody className="space-y-1">
-                    {[
+                    {(practiceType === 'dental' ? [
+                      { col: 'ClaimNumber', format: 'String (e.g., CLM-2025-001)' },
+                      { col: 'PatientName', format: 'String (e.g., John Smith)' },
+                      { col: 'PatientDOB', format: 'YYYY-MM-DD' },
+                      { col: 'PayerName', format: 'String (e.g., Delta Dental)' },
+                      { col: 'PayerID', format: 'String (e.g., DD-54321)' },
+                      { col: 'ProviderNPI', format: '10-digit NPI' },
+                      { col: 'DateOfService', format: 'YYYY-MM-DD' },
+                      { col: 'DenialDate', format: 'YYYY-MM-DD' },
+                      { col: 'CDTCode', format: 'D-code (e.g., D2391, D1110)' },
+                      { col: 'ToothNumber', format: '1-32 or empty' },
+                      { col: 'DiagnosisCode', format: 'ICD-10 code (e.g., K04.7)' },
+                      { col: 'BilledAmount', format: 'Decimal (e.g., 180.00)' },
+                      { col: 'DeniedAmount', format: 'Decimal (e.g., 180.00)' },
+                      { col: 'CARCCode', format: 'Claim adjustment code (e.g., CO-96)' },
+                      { col: 'RARCCode', format: 'Remittance advice code' },
+                      { col: 'AdjustmentGroupCode', format: 'CO, PR, or OA' },
+                    ] : [
                       { col: 'ClaimNumber', format: 'String (e.g., CLM-2025-001)' },
                       { col: 'PatientName', format: 'String (e.g., John Smith)' },
                       { col: 'PatientDOB', format: 'YYYY-MM-DD' },
@@ -268,7 +350,7 @@ export function UploadView() {
                       { col: 'CARCCode', format: 'Claim adjustment code (e.g., CO-16)' },
                       { col: 'RARCCode', format: 'Remittance advice code' },
                       { col: 'AdjustmentGroupCode', format: 'CO, PR, or OA' },
-                    ].map((row) => (
+                    ]).map((row) => (
                       <tr key={row.col} className="border-b border-border/50">
                         <td className="py-1.5 font-mono text-primary">{row.col}</td>
                         <td className="py-1.5 text-muted-foreground">{row.format}</td>
@@ -279,6 +361,48 @@ export function UploadView() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Current Payment Plan */}
+          {accessLevel && (
+            <Card className="border-border bg-card">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-primary" />
+                  Your Plan
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Level {accessLevel}: {levelConfig?.name}</p>
+                    <p className="text-xs text-muted-foreground">{practiceType === 'dental' ? 'Dental' : 'Medical'} practice</p>
+                  </div>
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
+                    Active
+                  </Badge>
+                </div>
+                <Separator className="my-3" />
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <Package className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">Per 100 claims</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CreditCard className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">Pay per claim</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">Pay as you grow</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Percent className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">Collections %</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
@@ -296,6 +420,7 @@ function OverviewScanView({ report, signing, signerName, setSignerName, onSign, 
   onNavigateToDenials: () => void;
   onNavigateToReport: () => void;
 }) {
+  const { practiceType, accessLevel } = useAppStore();
   const isSigned = report.contractStatus === 'signed';
 
   const getRatingColor = (rating: number) => {
@@ -324,10 +449,16 @@ function OverviewScanView({ report, signing, signerName, setSignerName, onSign, 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Denial Overview Report</h2>
+          <h2 className="text-2xl font-bold text-foreground">
+            {practiceType === 'dental' ? 'Dental' : 'Medical'} Denial Overview Report
+          </h2>
           <p className="text-muted-foreground mt-1">{report.fileName} · {report.uploadDate ? new Date(report.uploadDate).toLocaleDateString() : 'Today'}</p>
         </div>
         <div className="flex items-center gap-3">
+          <Badge variant="outline" className={practiceType === 'dental' ? 'bg-cyan/10 text-cyan border-cyan/30' : 'bg-primary/10 text-primary border-primary/30'}>
+            {practiceType === 'dental' ? <Heart className="h-3 w-3 mr-1" /> : <Stethoscope className="h-3 w-3 mr-1" />}
+            {practiceType === 'dental' ? 'Dental' : 'Medical'}
+          </Badge>
           <Badge variant="outline" className={isSigned ? 'bg-emerald/10 text-emerald border-emerald/30' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'}>
             {isSigned ? <><Unlock className="h-3 w-3 mr-1" /> Contract Signed</> : <><Lock className="h-3 w-3 mr-1" /> Awaiting Contract</>}
           </Badge>
@@ -461,86 +592,25 @@ function OverviewScanView({ report, signing, signerName, setSignerName, onSign, 
         </Card>
       </div>
 
-      {/* Top Denial Reasons + Category Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Denial Reasons */}
-        <Card className="border-border bg-card">
+      {/* Level 2+ Actions (if access level >= 2) */}
+      {accessLevel && accessLevel >= 2 && (
+        <Card className="border-2 border-emerald/30 bg-emerald/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-primary" /> Top Denial Reasons
+              <Zap className="h-4 w-4 text-emerald" /> Level {accessLevel} Actions Available
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4">
-            <div className="space-y-3">
-              {report.topDenialReasons.map((reason, idx) => (
-                <div key={idx} className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
-                    {idx + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground truncate">{reason.reason}</span>
-                      <span className="text-xs font-mono text-primary ml-2">{reason.carcCode}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                      <span>{reason.count} claims</span>
-                      <span>${reason.amount.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Category Breakdown */}
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">Category Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="space-y-3">
-              {report.categoryBreakdown.map((cat, idx) => {
-                const colors = ['bg-primary', 'bg-cyan', 'bg-emerald', 'bg-yellow-500', 'bg-orange-500', 'bg-red-500', 'bg-purple-500', 'bg-pink-500'];
-                const bgColors = ['bg-primary/20', 'bg-cyan/20', 'bg-emerald/20', 'bg-yellow-500/20', 'bg-orange-500/20', 'bg-red-500/20', 'bg-purple-500/20', 'bg-pink-500/20'];
-                return (
-                  <div key={idx} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground capitalize">{cat.category.replace(/_/g, ' ')}</span>
-                      <span className="text-foreground font-medium">{cat.count} claims · ${cat.amount.toLocaleString()} · {cat.percentage}%</span>
-                    </div>
-                    <div className={`h-2.5 rounded-full ${bgColors[idx % bgColors.length]}`}>
-                      <div
-                        className={`h-full rounded-full ${colors[idx % colors.length]} transition-all duration-500`}
-                        style={{ width: `${Math.max(cat.percentage, 2)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recommendations */}
-      {report.recommendations.length > 0 && (
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" /> Recommendations
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {report.recommendations.map((rec, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-secondary">
-                  <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0 mt-0.5">
-                    {idx + 1}
-                  </div>
-                  <p className="text-sm text-foreground">{rec}</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <Button onClick={() => setCurrentView('denials')} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <FileText className="h-4 w-4 mr-2" /> Work Individual Claims
+              </Button>
+              <Button variant="outline" className="border-emerald/30 text-emerald">
+                <Shield className="h-4 w-4 mr-2" /> Generate Pre-Auth Letters
+              </Button>
+              <Button variant="outline" className="border-emerald/30 text-emerald">
+                <BarChart3 className="h-4 w-4 mr-2" /> Export Fix Report
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -583,7 +653,13 @@ function OverviewScanView({ report, signing, signerName, setSignerName, onSign, 
                   <FileSignature className="h-5 w-5 text-yellow-400 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-foreground">This overview report is for client review only</p>
-                    <p className="text-xs text-muted-foreground mt-1">To unlock claim analysis, correction, and resubmission capabilities, a contract must be signed. The AI agents that fix denied claims will only activate after contract signing.</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {accessLevel === 1
+                        ? 'To unlock full claim analysis and correction, a contract must be signed.'
+                        : accessLevel === 2
+                        ? 'Sign the contract to let AI work each claim, generate pre-auth letters, and create a complete fix report.'
+                        : 'Sign the contract to activate AI agents that will autonomously fix and resubmit claims through your EHR.'}
+                    </p>
                   </div>
                 </div>
               </div>

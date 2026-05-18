@@ -1,38 +1,79 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDenialById, updateDenial } from '@/lib/data';
 import { createBatchJob, getBatchJob, getAllBatchJobs, updateBatchJob, addBatchResult, cancelBatchJob } from '@/lib/batch-processor';
+import { batchProcessor } from '@/lib/batch-processor';
 import { callAzureOpenAI, parseJSONResponse, DENIAL_ANALYSIS_PROMPT, CORRECTION_SUGGESTION_PROMPT, QUALITY_CHECKER_PROMPT } from '@/lib/azure-openai';
+import { analyzeDentalDenial } from '@/lib/dental-cdt-codes';
 import { createAuditLog } from '@/lib/audit';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { jobType, denialIds } = body;
+    const { jobType, denialIds, level, practiceType, config } = body;
 
     if (!jobType || !denialIds || !Array.isArray(denialIds) || denialIds.length === 0) {
       return NextResponse.json({ error: 'jobType and denialIds array required' }, { status: 400 });
     }
 
-    if (!['analyze', 'correct', 'quality_check'].includes(jobType)) {
-      return NextResponse.json({ error: 'Invalid jobType. Must be: analyze, correct, quality_check' }, { status: 400 });
+    const validJobTypes = ['analyze', 'correct', 'quality_check', 'appeal_generate', 'batch_scan', 'batch_fix'];
+    if (!validJobTypes.includes(jobType)) {
+      return NextResponse.json({ error: `Invalid jobType. Must be one of: ${validJobTypes.join(', ')}` }, { status: 400 });
     }
 
-    const job = createBatchJob({ jobType, denialIds });
+    // Volume limit warning for very large batches
+    if (denialIds.length > 50000) {
+      return NextResponse.json({
+        error: 'Maximum batch size is 50,000 claims. Please split into multiple batches.',
+        suggestion: `Split into ${Math.ceil(denialIds.length / 50000)} batches of 50,000 or fewer.`,
+      }, { status: 400 });
+    }
+
+    const accessLevel = level || 1;
+    const pType = practiceType || 'medical';
+
+    // Create optimized batch job using the new BatchProcessorManager
+    const managedJob = batchProcessor.createJob(
+      denialIds,
+      jobType,
+      accessLevel,
+      config
+    );
+
+    // Also create in legacy system for compatibility
+    const legacyJob = createBatchJob({ jobType, denialIds });
 
     createAuditLog({
       action: 'batch_start',
       entityType: 'batch_job',
-      entityId: job.id,
-      metadata: { jobType, totalItems: denialIds.length },
+      entityId: managedJob.id,
+      metadata: {
+        jobType,
+        totalItems: denialIds.length,
+        accessLevel,
+        practiceType: pType,
+        chunkSize: managedJob.config.chunkSize,
+        maxConcurrency: managedJob.config.maxConcurrency,
+      },
     });
 
     // Start processing asynchronously (non-blocking)
-    updateBatchJob(job.id, { status: 'running', startedAt: new Date().toISOString() });
+    updateBatchJob(legacyJob.id, { status: 'running', startedAt: new Date().toISOString() });
 
-    // Process each denial
-    processBatch(job.id, jobType, denialIds);
+    // Start the optimized batch processing
+    processLargeBatch(managedJob.id, legacyJob.id, jobType, denialIds, accessLevel, pType);
 
-    return NextResponse.json({ job });
+    return NextResponse.json({
+      job: {
+        ...managedJob,
+        legacyJobId: legacyJob.id,
+        config: {
+          chunkSize: managedJob.config.chunkSize,
+          maxConcurrency: managedJob.config.maxConcurrency,
+          level: managedJob.config.level,
+        },
+        estimatedDuration: estimateDuration(denialIds.length, accessLevel, jobType),
+      },
+    });
   } catch (error) {
     console.error('Error creating batch job:', error);
     return NextResponse.json({ error: 'Failed to create batch job' }, { status: 500 });
@@ -43,8 +84,23 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('id');
+    const managedJobId = searchParams.get('managedId');
     const status = searchParams.get('status');
     const jobType = searchParams.get('jobType');
+
+    // Check managed job first
+    if (managedJobId) {
+      const managedJob = batchProcessor.getJob(managedJobId);
+      if (managedJob) {
+        const progress = batchProcessor.getProgress(managedJobId);
+        const eta = batchProcessor.getEstimatedTimeRemaining(managedJobId);
+        return NextResponse.json({
+          job: managedJob,
+          progress,
+          estimatedTimeRemainingMinutes: eta,
+        });
+      }
+    }
 
     if (jobId) {
       const job = getBatchJob(jobId);
@@ -57,7 +113,22 @@ export async function GET(request: NextRequest) {
       jobType: jobType || undefined,
     });
 
-    return NextResponse.json({ jobs });
+    const managedJobs = batchProcessor.getAllJobs();
+
+    return NextResponse.json({
+      jobs,
+      managedJobs: managedJobs.map(j => ({
+        id: j.id,
+        jobType: j.jobType,
+        status: j.status,
+        totalItems: j.totalItems,
+        processedItems: j.processedItems,
+        failedItems: j.failedItems,
+        throughput: j.throughput,
+        progress: batchProcessor.getProgress(j.id),
+        eta: batchProcessor.getEstimatedTimeRemaining(j.id),
+      })),
+    });
   } catch (error) {
     console.error('Error fetching batch jobs:', error);
     return NextResponse.json({ error: 'Failed to fetch batch jobs' }, { status: 500 });
@@ -68,6 +139,15 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('id');
+    const managedJobId = searchParams.get('managedId');
+
+    if (managedJobId) {
+      const cancelled = batchProcessor.cancelJob(managedJobId);
+      if (!cancelled) {
+        return NextResponse.json({ error: 'Job not found or already completed' }, { status: 404 });
+      }
+      return NextResponse.json({ message: 'Managed job cancelled', jobId: managedJobId });
+    }
 
     if (!jobId) {
       return NextResponse.json({ error: 'Job ID required' }, { status: 400 });
@@ -85,16 +165,22 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-async function processBatch(jobId: string, jobType: string, denialIds: string[]) {
-  for (const denialId of denialIds) {
-    const job = getBatchJob(jobId);
-    if (!job || job.status === 'cancelled') break;
-
+/**
+ * Process large batches with chunked parallel processing
+ */
+async function processLargeBatch(
+  managedJobId: string,
+  legacyJobId: string,
+  jobType: string,
+  denialIds: string[],
+  level: number,
+  practiceType: string
+) {
+  const processItem = async (denialId: string, accessLevel: number) => {
     try {
       const denial = await getDenialById(denialId);
       if (!denial) {
-        addBatchResult(jobId, { denialId, success: false, error: 'Denial not found' });
-        continue;
+        return { success: false, error: 'Denial not found' };
       }
 
       const claimData = JSON.stringify({
@@ -103,6 +189,8 @@ async function processBatch(jobId: string, jobType: string, denialIds: string[])
         payerName: denial.payerName,
         dateOfService: denial.dateOfService,
         cptCode: denial.cptCode,
+        cdtCode: denial.cdtCode || '',
+        codeType: denial.codeType || (practiceType === 'dental' ? 'CDT' : 'CPT'),
         modifier: denial.modifier,
         diagnosisCode: denial.diagnosisCode,
         billedAmount: denial.billedAmount,
@@ -111,68 +199,161 @@ async function processBatch(jobId: string, jobType: string, denialIds: string[])
         rarcCode: denial.rarcCode,
         adjustmentGroupCode: denial.adjustmentGroupCode,
         denialCategory: denial.denialCategory,
+        practiceType,
       });
 
-      let prompt = '';
-      let userMessage = '';
       let newStatus = '';
 
+      // Level-based processing depth
       switch (jobType) {
         case 'analyze':
-          prompt = DENIAL_ANALYSIS_PROMPT;
-          userMessage = `Analyze this denied claim:\n${claimData}`;
+        case 'batch_scan': {
+          // Level 1: Quick scan
+          if (practiceType === 'dental') {
+            // Use dental-specific analysis
+            const dentalAnalysis = analyzeDentalDenial(denial);
+            await updateDenial(denialId, {
+              status: 'Analyzed',
+              analysis: {
+                denialSummary: dentalAnalysis.denialReason,
+                rootCauseCategory: dentalAnalysis.category,
+                rootCauseDetail: dentalAnalysis.isFrequencyIssue ? 'Frequency limitation' :
+                  dentalAnalysis.missingToothClauseApplies ? 'Missing tooth clause' :
+                  dentalAnalysis.denialReason,
+                denialCategory: dentalAnalysis.category,
+                preventable: true,
+                correctable: dentalAnalysis.estimatedSuccessRate > 40,
+                appealRecommended: dentalAnalysis.estimatedSuccessRate > 30,
+                confidenceScore: dentalAnalysis.estimatedSuccessRate / 100,
+                recommendedNextAction: dentalAnalysis.commonFixes[0] || 'Review denial reason',
+                requiredInformation: dentalAnalysis.commonFixes.map(f => ({ item: f, reasonNeeded: 'To support appeal or correction' })),
+                complianceNotes: dentalAnalysis.appealStrategy.slice(0, 3),
+                analyzedAt: new Date().toISOString(),
+              },
+            } as any);
+            return { success: true };
+          }
+
+          // Medical analysis via AI
+          const responseText = await callAzureOpenAI(DENIAL_ANALYSIS_PROMPT, `Analyze this denied claim:\n${claimData}`);
+          const parsed = parseJSONResponse(responseText);
+          await updateDenial(denialId, {
+            status: 'Analyzed',
+            analysis: { ...parsed, analyzedAt: new Date().toISOString() },
+          } as any);
           newStatus = 'Analyzed';
           break;
+        }
         case 'correct':
-          prompt = CORRECTION_SUGGESTION_PROMPT;
-          userMessage = `Suggest corrections for this denied claim:\n${claimData}\nAnalysis: ${JSON.stringify(denial.analysis || {})}`;
+        case 'batch_fix': {
+          // Level 2: Full fix with pre-auth letters
+          if (practiceType === 'dental') {
+            const dentalAnalysis = analyzeDentalDenial(denial);
+            const responseText = await callAzureOpenAI(
+              CORRECTION_SUGGESTION_PROMPT,
+              `Suggest corrections for this dental denial:\n${claimData}\nDental Analysis: ${JSON.stringify(dentalAnalysis)}`
+            );
+            const parsed = parseJSONResponse(responseText);
+            await updateDenial(denialId, {
+              status: 'Corrected',
+              correction: {
+                ...parsed,
+                dentalSpecific: dentalAnalysis,
+                createdAt: new Date().toISOString(),
+              },
+            } as any);
+          } else {
+            const responseText = await callAzureOpenAI(
+              CORRECTION_SUGGESTION_PROMPT,
+              `Suggest corrections for this denied claim:\n${claimData}\nAnalysis: ${JSON.stringify(denial.analysis || {})}`
+            );
+            const parsed = parseJSONResponse(responseText);
+            await updateDenial(denialId, {
+              status: 'Corrected',
+              correction: { ...parsed, createdAt: new Date().toISOString() },
+            } as any);
+          }
           newStatus = 'Corrected';
           break;
-        case 'quality_check':
-          prompt = QUALITY_CHECKER_PROMPT;
-          userMessage = `Quality check this correction:\n${claimData}\nCorrection: ${JSON.stringify(denial.correction || {})}`;
+        }
+        case 'quality_check': {
+          const responseText = await callAzureOpenAI(
+            QUALITY_CHECKER_PROMPT,
+            `Quality check this correction:\n${claimData}\nCorrection: ${JSON.stringify(denial.correction || {})}`
+          );
+          const parsed = parseJSONResponse(responseText);
+          await updateDenial(denialId, {
+            status: 'Reviewed',
+            qualityCheck: { ...parsed, checkedAt: new Date().toISOString() },
+          } as any);
           newStatus = 'Reviewed';
           break;
+        }
+        case 'appeal_generate': {
+          // Level 2+3: Generate appeal letters
+          const responseText = await callAzureOpenAI(
+            'You are a medical/dental appeal letter writer. Generate a professional first-level appeal letter for the following denied claim. Include: 1) Patient and claim info 2) Clinical justification 3) References to LCD/NCD or ADA guidelines 4) Request for review. Return the letter as plain text.',
+            `Generate appeal letter for:\n${claimData}\nAnalysis: ${JSON.stringify(denial.analysis || {})}\nCorrection: ${JSON.stringify(denial.correction || {})}`
+          );
+          await updateDenial(denialId, { status: 'Appealed' } as any);
+          newStatus = 'Appealed';
+          break;
+        }
       }
 
-      try {
-        const responseText = await callAzureOpenAI(prompt, userMessage);
-        const parsed = parseJSONResponse(responseText);
-
-        // Update denial based on job type
-        const updates: Record<string, unknown> = { status: newStatus };
-        if (jobType === 'analyze') updates.analysis = { ...parsed, analyzedAt: new Date().toISOString() };
-        if (jobType === 'correct') updates.correction = { ...parsed, createdAt: new Date().toISOString() };
-        if (jobType === 'quality_check') updates.qualityCheck = { ...parsed, checkedAt: new Date().toISOString() };
-
-        await updateDenial(denialId, updates as any);
-        addBatchResult(jobId, { denialId, success: true });
-      } catch (aiError) {
-        // AI failed but we can still mark as processed with fallback
-        addBatchResult(jobId, { denialId, success: false, error: String(aiError) });
-      }
-    } catch (err) {
-      addBatchResult(jobId, { denialId, success: false, error: String(err) });
+      // Also update legacy job
+      addBatchResult(legacyJobId, { denialId, success: true });
+      return { success: true };
+    } catch (error) {
+      addBatchResult(legacyJobId, { denialId, success: false, error: String(error) });
+      return { success: false, error: String(error) };
     }
-  }
+  };
 
-  // Final job status update
-  const finalJob = getBatchJob(jobId);
-  if (finalJob && finalJob.status !== 'cancelled') {
-    updateBatchJob(jobId, {
-      status: finalJob.failedItems === finalJob.totalItems ? 'failed' : 'completed',
-      completedAt: new Date().toISOString(),
-    });
+  // Start the managed batch processor
+  await batchProcessor.startJob(managedJobId, processItem, (job) => {
+    // Progress callback - can be used for real-time updates via WebSocket
+  });
 
+  // Final audit log
+  const managedJob = batchProcessor.getJob(managedJobId);
+  if (managedJob) {
     createAuditLog({
       action: 'batch_complete',
       entityType: 'batch_job',
-      entityId: jobId,
+      entityId: managedJobId,
       metadata: {
-        totalItems: finalJob.totalItems,
-        processedItems: finalJob.processedItems,
-        failedItems: finalJob.failedItems,
+        totalItems: managedJob.totalItems,
+        processedItems: managedJob.processedItems,
+        failedItems: managedJob.failedItems,
+        throughput: managedJob.throughput,
+        duration: managedJob.completedAt
+          ? new Date(managedJob.completedAt).getTime() - new Date(managedJob.startedAt || managedJob.createdAt).getTime()
+          : 0,
       },
     });
   }
+}
+
+/**
+ * Estimate processing duration based on volume, level, and job type
+ */
+function estimateDuration(totalClaims: number, level: number, jobType: string): string {
+  // Base time per claim in seconds
+  const baseTimes: Record<string, Record<number, number>> = {
+    analyze: { 1: 0.5, 2: 2, 3: 3 },
+    correct: { 1: 1, 2: 5, 3: 8 },
+    quality_check: { 1: 1, 2: 3, 3: 4 },
+    appeal_generate: { 1: 2, 2: 5, 3: 7 },
+    batch_scan: { 1: 0.3, 2: 1, 3: 2 },
+    batch_fix: { 1: 1, 2: 5, 3: 8 },
+  };
+
+  const timePerClaim = baseTimes[jobType]?.[level] || 3;
+  const concurrency = level === 1 ? 5 : level === 2 ? 3 : 2;
+  const totalSeconds = (totalClaims * timePerClaim) / concurrency;
+
+  if (totalSeconds < 60) return `${Math.round(totalSeconds)} seconds`;
+  if (totalSeconds < 3600) return `${Math.round(totalSeconds / 60)} minutes`;
+  return `${(totalSeconds / 3600).toFixed(1)} hours`;
 }
