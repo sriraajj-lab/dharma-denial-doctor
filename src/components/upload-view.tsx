@@ -2,12 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
-import { OverviewReport, LEVEL_CONFIGS } from '@/lib/types';
+import { OverviewReport } from '@/lib/types';
 import {
   Upload, FileText, CheckCircle2, AlertCircle, Loader2, Download,
   Shield, TrendingUp, AlertTriangle, XCircle, ArrowRight, Lock,
   Unlock, FileSignature, BarChart3, Eye, Stethoscope, Heart,
-  Package, CreditCard, Percent, Clock, Zap,
+  ShieldCheck, Activity, Clock, Zap,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,7 @@ export function UploadView() {
   const [report, setReport] = useState<OverviewReport | null>(null);
   const [signing, setSigning] = useState(false);
   const [signerName, setSignerName] = useState('');
-  const { navigateToReport, setCurrentView, setContractSigned, practiceType, accessLevel } = useAppStore();
+  const { navigateToReport, setCurrentView, setContractSigned, practiceType } = useAppStore();
 
   const handleUpload = useCallback(async (file: File) => {
     if (!file.name.endsWith('.csv')) {
@@ -157,11 +157,9 @@ export function UploadView() {
     return <OverviewScanView report={report} signing={signing} signerName={signerName} setSignerName={setSignerName} onSign={handleSignContract} onNavigateToDenials={() => setCurrentView('denials')} onNavigateToReport={() => navigateToReport(report.id)} />;
   }
 
-  const levelConfig = LEVEL_CONFIGS.find(l => l.level === accessLevel);
-
   return (
     <div className="space-y-6">
-      {/* Header with practice type and level info */}
+      {/* Header with practice type */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Upload Denial Report</h2>
@@ -174,33 +172,31 @@ export function UploadView() {
             {practiceType === 'dental' ? <Heart className="h-3 w-3 mr-1" /> : <Stethoscope className="h-3 w-3 mr-1" />}
             {practiceType === 'dental' ? 'Dental' : 'Medical'}
           </Badge>
-          {levelConfig && (
-            <Badge variant="outline" className={levelConfig.bgColor + ' ' + levelConfig.color + ' ' + levelConfig.borderColor}>
-              L{levelConfig.level}: {levelConfig.name}
-            </Badge>
-          )}
+          <Badge variant="outline" className="bg-emerald/10 text-emerald border-emerald/30">
+            Full Access
+          </Badge>
         </div>
       </div>
 
-      {/* Level-based Process Flow */}
+      {/* Process Flow - All steps active */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className={`rounded-xl border-2 p-5 ${accessLevel && accessLevel >= 1 ? 'border-cyan/30 bg-cyan/5' : 'border-border bg-secondary/50'}`}>
+        <div className="rounded-xl border-2 p-5 border-cyan/30 bg-cyan/5">
           <div className="flex items-center gap-3 mb-2">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm ${accessLevel && accessLevel >= 1 ? 'bg-cyan/20 text-cyan' : 'bg-secondary text-muted-foreground'}`}>1</div>
+            <div className="h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm bg-cyan/20 text-cyan">1</div>
             <h3 className="text-sm font-semibold text-foreground">Scan & Score</h3>
           </div>
           <p className="text-xs text-muted-foreground ml-11">AI analyzes your denial report and generates a client-facing overview with rating and key issues.</p>
         </div>
-        <div className={`rounded-xl border-2 p-5 ${accessLevel && accessLevel >= 2 ? 'border-emerald/30 bg-emerald/5' : 'border-border bg-secondary/50'}`}>
+        <div className="rounded-xl border-2 p-5 border-emerald/30 bg-emerald/5">
           <div className="flex items-center gap-3 mb-2">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm ${accessLevel && accessLevel >= 2 ? 'bg-emerald/20 text-emerald' : 'bg-secondary text-muted-foreground'}`}>2</div>
+            <div className="h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm bg-emerald/20 text-emerald">2</div>
             <h3 className="text-sm font-semibold text-foreground">Fix & Generate Report</h3>
           </div>
           <p className="text-xs text-muted-foreground ml-11">AI works each claim, generates pre-auth letters, shows where to submit, and gives a complete report for manual execution.</p>
         </div>
-        <div className={`rounded-xl border-2 p-5 ${accessLevel && accessLevel >= 3 ? 'border-primary/30 bg-primary/5' : 'border-border bg-secondary/50'}`}>
+        <div className="rounded-xl border-2 p-5 border-primary/30 bg-primary/5">
           <div className="flex items-center gap-3 mb-2">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm ${accessLevel && accessLevel >= 3 ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}>3</div>
+            <div className="h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm bg-primary/20 text-primary">3</div>
             <h3 className="text-sm font-semibold text-foreground">EHR Auto-Fix</h3>
           </div>
           <p className="text-xs text-muted-foreground ml-11">Agents fix everything automatically through EHR integration. Hands-free recovery.</p>
@@ -362,47 +358,45 @@ export function UploadView() {
             </CardContent>
           </Card>
 
-          {/* Current Payment Plan */}
-          {accessLevel && (
-            <Card className="border-border bg-card">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-primary" />
-                  Your Plan
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Level {accessLevel}: {levelConfig?.name}</p>
-                    <p className="text-xs text-muted-foreground">{practiceType === 'dental' ? 'Dental' : 'Medical'} practice</p>
-                  </div>
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
-                    Active
-                  </Badge>
+          {/* Platform Info */}
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Shield className="h-4 w-4 text-emerald" />
+                Internal Platform
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Dharma Solutions</p>
+                  <p className="text-xs text-muted-foreground">{practiceType === 'dental' ? 'Dental' : 'Medical'} billing</p>
                 </div>
-                <Separator className="my-3" />
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <Package className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">Per 100 claims</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <CreditCard className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">Pay per claim</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <TrendingUp className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">Pay as you grow</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Percent className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">Collections %</span>
-                  </div>
+                <Badge variant="outline" className="bg-emerald/10 text-emerald border-emerald/30">
+                  Full Access
+                </Badge>
+              </div>
+              <Separator className="my-3" />
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">16 AI Agents</span>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+                <div className="flex items-center gap-1.5">
+                  <Activity className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">EHR Auto-Fix</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <FileText className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">Appeal Drafts</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">Pre-Auth Letters</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
@@ -420,7 +414,7 @@ function OverviewScanView({ report, signing, signerName, setSignerName, onSign, 
   onNavigateToDenials: () => void;
   onNavigateToReport: () => void;
 }) {
-  const { practiceType, accessLevel } = useAppStore();
+  const { practiceType } = useAppStore();
   const isSigned = report.contractStatus === 'signed';
 
   const getRatingColor = (rating: number) => {
@@ -592,29 +586,27 @@ function OverviewScanView({ report, signing, signerName, setSignerName, onSign, 
         </Card>
       </div>
 
-      {/* Level 2+ Actions (if access level >= 2) */}
-      {accessLevel && accessLevel >= 2 && (
-        <Card className="border-2 border-emerald/30 bg-emerald/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Zap className="h-4 w-4 text-emerald" /> Level {accessLevel} Actions Available
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              <Button onClick={() => setCurrentView('denials')} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                <FileText className="h-4 w-4 mr-2" /> Work Individual Claims
-              </Button>
-              <Button variant="outline" className="border-emerald/30 text-emerald">
-                <Shield className="h-4 w-4 mr-2" /> Generate Pre-Auth Letters
-              </Button>
-              <Button variant="outline" className="border-emerald/30 text-emerald">
-                <BarChart3 className="h-4 w-4 mr-2" /> Export Fix Report
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Quick Actions */}
+      <Card className="border-2 border-emerald/30 bg-emerald/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Zap className="h-4 w-4 text-emerald" /> Quick Actions
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Button onClick={() => setCurrentView('denials')} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <FileText className="h-4 w-4 mr-2" /> Work Individual Claims
+            </Button>
+            <Button variant="outline" className="border-emerald/30 text-emerald">
+              <Shield className="h-4 w-4 mr-2" /> Generate Pre-Auth Letters
+            </Button>
+            <Button variant="outline" className="border-emerald/30 text-emerald">
+              <BarChart3 className="h-4 w-4 mr-2" /> Export Fix Report
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Contract Gate Section */}
       <Card className={`border-2 ${isSigned ? 'border-emerald/30 bg-emerald/5' : 'border-yellow-500/30 bg-yellow-500/5'}`}>
@@ -654,11 +646,7 @@ function OverviewScanView({ report, signing, signerName, setSignerName, onSign, 
                   <div>
                     <p className="text-sm font-medium text-foreground">This overview report is for client review only</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {accessLevel === 1
-                        ? 'To unlock full claim analysis and correction, a contract must be signed.'
-                        : accessLevel === 2
-                        ? 'Sign the contract to let AI work each claim, generate pre-auth letters, and create a complete fix report.'
-                        : 'Sign the contract to activate AI agents that will autonomously fix and resubmit claims through your EHR.'}
+                      Sign the contract to activate AI agents that will autonomously fix and resubmit claims through your EHR.
                     </p>
                   </div>
                 </div>

@@ -2,29 +2,24 @@
 
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { LEVEL_CONFIGS, AccessLevel, PracticeType } from '@/lib/types';
+import { PracticeType } from '@/lib/types';
 import {
-  Shield, ChevronRight, CheckCircle2, Zap,
+  Shield, ChevronRight, CheckCircle2,
   Upload, Stethoscope,
-  ArrowRight, Star, Users, Clock, TrendingUp,
-  Eye, Wrench, Cpu, Heart,
+  ArrowRight, Users, Clock, TrendingUp,
+  Heart, Zap, Bot, ShieldCheck, Activity,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-// ─── Landing Page ───────────────────────────────────────────────────────────────
+// ─── Landing Page (Dharma Solutions Internal) ──────────────────────────────────
 
 export function LandingView() {
   const { setPracticeType, setAccessLevel, setContractSigned, setCurrentView } = useAppStore();
   const [selectedPractice, setSelectedPractice] = useState<PracticeType | null>(null);
-  const [selectedLevel, setSelectedLevel] = useState<AccessLevel | null>(null);
 
   const handlePracticeSelect = (type: PracticeType) => {
     setSelectedPractice(type);
-  };
-
-  const handleLevelSelect = (level: AccessLevel) => {
-    setSelectedLevel(level);
   };
 
   const handleGetStarted = () => {
@@ -50,11 +45,11 @@ export function LandingView() {
               </h1>
             </div>
             <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-sm px-4 py-1 mb-4">
-              Denial Management Platform
+              Internal Denial Management Platform
             </Badge>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto mt-4 leading-relaxed">
-              Internal denial recovery platform with 16 specialized AI agents. From scan to full EHR integration,
-              streamline your revenue cycle management.
+              Full access denial recovery platform with 16 specialized AI agents. Scan, fix, appeal, and auto-resubmit
+              claims across medical and dental billing clients.
             </p>
             <div className="flex items-center justify-center gap-6 mt-8 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
@@ -74,16 +69,16 @@ export function LandingView() {
         </div>
       </header>
 
-      {/* Step 1: Practice Type Selection */}
+      {/* Practice Type Selection */}
       <section className="max-w-7xl mx-auto px-6 py-16">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-4">
             <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">1</span>
-            Choose Your Practice Type
+            Select Client Practice Type
           </div>
           <h2 className="text-3xl font-bold text-foreground">Medical or Dental?</h2>
           <p className="text-muted-foreground mt-2 max-w-lg mx-auto">
-            Select your practice type to get specialized denial management with the right code sets and rules.
+            Choose your client&apos;s practice type for specialized denial management with the right code sets and rules.
           </p>
         </div>
 
@@ -178,74 +173,42 @@ export function LandingView() {
         </div>
       </section>
 
-      {/* Step 2: Level Selection */}
+      {/* Full Access Features */}
       {selectedPractice && (
-        <section className="max-w-7xl mx-auto px-6 py-16 border-t border-border">
+        <section className="max-w-7xl mx-auto px-6 py-12 border-t border-border">
           <div className="text-center mb-10">
-            <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-4">
-              <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">2</span>
-              Choose Your Recovery Level
+            <div className="inline-flex items-center gap-2 bg-emerald/10 text-emerald px-4 py-1.5 rounded-full text-sm font-medium mb-4">
+              <ShieldCheck className="h-4 w-4" />
+              Full Internal Access
             </div>
-            <h2 className="text-3xl font-bold text-foreground">3 Levels of AI-Powered Recovery</h2>
+            <h2 className="text-3xl font-bold text-foreground">All Features Unlocked</h2>
             <p className="text-muted-foreground mt-2 max-w-lg mx-auto">
-              From diagnosis to full automation. Pick the level that matches your needs.
+              As a Dharma Solutions team member, you have full access to all platform capabilities — no restrictions.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {LEVEL_CONFIGS.map((level) => {
-              const levelIcons = {
-                scan: <Eye className="h-8 w-8" />,
-                fix: <Wrench className="h-8 w-8" />,
-                auto: <Cpu className="h-8 w-8" />,
-              };
-              const isSelected = selectedLevel === level.level;
-
-              return (
-                <button
-                  key={level.level}
-                  onClick={() => handleLevelSelect(level.level)}
-                  className={`group relative rounded-2xl border-2 p-6 text-left transition-all duration-300 hover:shadow-xl ${
-                    isSelected
-                      ? `${level.borderColor} ${level.bgColor} shadow-lg scale-[1.02]`
-                      : 'border-border bg-card hover:border-primary/30'
-                  }`}
-                >
-                  {isSelected && (
-                    <div className={`absolute -top-3 -right-3 h-8 w-8 rounded-full ${level.bgColor} ${level.color} flex items-center justify-center border-2 ${level.borderColor}`}>
-                      <CheckCircle2 className="h-5 w-5" />
-                    </div>
-                  )}
-                  {level.level === 2 && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald text-primary-foreground text-xs px-3 py-0.5">
-                      <Star className="h-3 w-3 mr-1" /> Most Popular
-                    </Badge>
-                  )}
-
-                  <div className={`${level.color} mb-4`}>
-                    {levelIcons[level.icon as keyof typeof levelIcons]}
-                  </div>
-                  <div className="mb-1">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Level {level.level}</span>
-                  </div>
-                  <h3 className={`text-xl font-bold ${level.color}`}>{level.name}</h3>
-                  <p className="text-xs text-muted-foreground font-medium mt-0.5">{level.subtitle}</p>
-                  <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{level.description}</p>
-
-                  <div className="mt-5 space-y-2">
-                    {level.features.slice(0, level.level === 1 ? 9 : level.level === 2 ? 6 : 6).map((feature, idx) => (
-                      <div key={idx} className="flex items-start gap-2">
-                        <CheckCircle2 className={`h-4 w-4 ${level.color} flex-shrink-0 mt-0.5`} />
-                        <span className="text-xs text-foreground">{feature}</span>
-                      </div>
-                    ))}
-                    {level.features.length > (level.level === 1 ? 9 : 6) && (
-                      <p className="text-xs text-muted-foreground pl-6">+ {level.features.length - (level.level === 1 ? 9 : 6)} more features</p>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            <div className="rounded-2xl border border-border bg-card p-6 text-center">
+              <div className="h-12 w-12 rounded-xl bg-cyan/10 flex items-center justify-center mx-auto mb-4">
+                <Activity className="h-6 w-6 text-cyan" />
+              </div>
+              <h3 className="text-lg font-bold text-foreground mb-2">Scan & Score</h3>
+              <p className="text-sm text-muted-foreground">AI-powered denial analysis with CARC/RARC mapping, coding validation, and client health scoring.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-card p-6 text-center">
+              <div className="h-12 w-12 rounded-xl bg-emerald/10 flex items-center justify-center mx-auto mb-4">
+                <Zap className="h-6 w-6 text-emerald" />
+              </div>
+              <h3 className="text-lg font-bold text-foreground mb-2">Fix & Appeal</h3>
+              <p className="text-sm text-muted-foreground">Generate corrections, pre-auth letters, appeal drafts, and detailed fix reports for manual execution.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-card p-6 text-center">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <Bot className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-bold text-foreground mb-2">EHR Auto-Fix</h3>
+              <p className="text-sm text-muted-foreground">16 AI agents autonomously fix and resubmit claims through EHR integration. Hands-free recovery.</p>
+            </div>
           </div>
         </section>
       )}
@@ -256,8 +219,8 @@ export function LandingView() {
           <div className="rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-cyan/10 border border-primary/20 p-8 text-center">
             <h3 className="text-2xl font-bold text-foreground mb-3">Ready to recover your denied claims?</h3>
             <p className="text-muted-foreground max-w-lg mx-auto mb-6">
-              {selectedPractice === 'medical' ? 'Medical' : 'Dental'} practice with full access.
-              Upload your denial report and let AI start recovering revenue.
+              {selectedPractice === 'medical' ? 'Medical' : 'Dental'} billing with full AI-powered access.
+              Upload your denial report and let AI start recovering revenue for your clients.
             </p>
             <Button
               size="lg"
@@ -279,7 +242,7 @@ export function LandingView() {
             <Shield className="h-5 w-5 text-primary" />
             <span className="text-sm font-semibold text-foreground">Dharma Solutions</span>
           </div>
-          <p className="text-xs text-muted-foreground">Denial Management Platform</p>
+          <p className="text-xs text-muted-foreground">Internal Denial Management Platform</p>
           <div className="flex items-center justify-center gap-4 mt-3 text-xs text-muted-foreground">
             <span>HIPAA Compliant</span>
             <span>SOC 2 Certified</span>

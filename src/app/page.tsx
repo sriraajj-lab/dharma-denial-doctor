@@ -23,10 +23,9 @@ import { FinancialsView } from '@/components/financials-view';
 import { HealthScanView } from '@/components/health-scan-view';
 import { Shield, User, Heart, Stethoscope } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 
 export default function Home() {
-  const { currentView, sidebarOpen, contractSigned, currentUser, practiceType, accessLevel } = useAppStore();
+  const { currentView, sidebarOpen, currentUser, practiceType } = useAppStore();
 
   // Show Landing Page if no practice type selected
   if (currentView === 'landing' || !practiceType) {
@@ -76,21 +75,6 @@ export default function Home() {
     }
   };
 
-  const getLevelBadge = () => {
-    if (!accessLevel) return null;
-    const colors = {
-      1: 'bg-cyan/20 text-cyan border-cyan/30',
-      2: 'bg-emerald/20 text-emerald border-emerald/30',
-      3: 'bg-primary/20 text-primary border-primary/30',
-    };
-    const names = { 1: 'Scan & Score', 2: 'Fix & Appeal', 3: 'EHR Auto-Fix' };
-    return (
-      <Badge variant="outline" className={colors[accessLevel]}>
-        L{accessLevel}: {names[accessLevel]}
-      </Badge>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <AppSidebar />
@@ -111,19 +95,21 @@ export default function Home() {
                 {practiceType === 'medical' ? 'Medical' : 'Dental'}
               </Badge>
             )}
-            {getLevelBadge()}
+            <Badge variant="outline" className="bg-emerald/20 text-emerald border-emerald/30">
+              Full Access
+            </Badge>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-emerald animate-pulse" />
-              <span className="text-xs text-muted-foreground">{contractSigned ? 'Full Access' : 'Overview Only'}</span>
+              <span className="text-xs text-muted-foreground">Internal Staff</span>
             </div>
             <div className="flex items-center gap-2 border-l border-border pl-3">
               <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
                 <User className="h-4 w-4 text-primary" />
               </div>
               <div className="hidden md:block">
-                <p className="text-xs font-medium text-foreground">{currentUser?.name || 'System Admin'}</p>
+                <p className="text-xs font-medium text-foreground">{currentUser?.name || 'Dharma Staff'}</p>
                 <p className="text-[10px] text-muted-foreground capitalize">{currentUser?.role || 'admin'}</p>
               </div>
             </div>
