@@ -13,9 +13,9 @@ const BADGES = [
   { id: 'streak_master', name: 'Streak Master', icon: '🔥', description: '10+ day streak', check: (m: any) => m.streak >= 10 },
 ];
 
-export function getStaffMetrics() {
+export async function getStaffMetrics() {
   const users = getUsers();
-  const denials = getDenials();
+  const denials = await getDenials();
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay());

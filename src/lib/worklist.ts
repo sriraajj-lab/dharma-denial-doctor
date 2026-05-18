@@ -39,10 +39,10 @@ const CATEGORY_SUCCESS: Record<string, number> = {
   duplicate: 80, medical_necessity: 45, eligibility: 40, timely_filing: 15, other: 50,
 };
 
-export function generateWorklist(filters?: {
+export async function generateWorklist(filters?: {
   status?: string[]; category?: string; payerName?: string; minAmount?: number; maxItems?: number;
-}): { items: WorklistItem[]; summary: { totalItems: number; totalAtRisk: number; criticalCount: number; highCount: number; mediumCount: number; lowCount: number; totalPotentialRevenue: number; avgSuccessRate: number; itemsApproachingDeadline: number } } {
-  let denials = getDenials();
+}): Promise<{ items: WorklistItem[]; summary: { totalItems: number; totalAtRisk: number; criticalCount: number; highCount: number; mediumCount: number; lowCount: number; totalPotentialRevenue: number; avgSuccessRate: number; itemsApproachingDeadline: number } }> {
+  let denials = await getDenials();
   const workableStatuses = filters?.status || ['New', 'Analyzed', 'Corrected', 'Reviewed'];
   denials = denials.filter(d => workableStatuses.includes(d.status));
   if (filters?.category) denials = denials.filter(d => d.denialCategory === filters.category);

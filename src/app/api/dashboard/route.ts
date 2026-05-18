@@ -19,31 +19,31 @@ export async function GET(request: NextRequest) {
       const maxItems = searchParams.get('maxItems') ? parseInt(searchParams.get('maxItems')!) : 50;
       const statusParam = searchParams.get('status');
       const status = statusParam ? statusParam.split(',') : undefined;
-      const worklist = generateWorklist({ category, payerName, minAmount, maxItems, status });
+      const worklist = await generateWorklist({ category, payerName, minAmount, maxItems, status });
       return NextResponse.json(worklist);
     }
 
     if (view === 'prevention') {
-      return NextResponse.json(generatePreventionDashboard());
+      return NextResponse.json(await generatePreventionDashboard());
     }
 
     if (view === 'followup') {
-      const tasks = generateFollowUpTasks();
-      const summary = getFollowUpSummary();
+      const tasks = await generateFollowUpTasks();
+      const summary = await getFollowUpSummary();
       return NextResponse.json({ tasks, summary });
     }
 
     if (view === 'appeal-deadlines') {
-      return NextResponse.json(getAppealDeadlines());
+      return NextResponse.json(await getAppealDeadlines());
     }
 
     if (view === 'staff-metrics') {
-      return NextResponse.json(getStaffMetrics());
+      return NextResponse.json(await getStaffMetrics());
     }
 
     if (view === 'nl-query') {
       const q = searchParams.get('q') || '';
-      return NextResponse.json(executeNLQuery(q));
+      return NextResponse.json(await executeNLQuery(q));
     }
 
     const stats = await getDashboardStats();

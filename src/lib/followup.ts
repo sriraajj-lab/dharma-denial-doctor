@@ -10,8 +10,9 @@ const CADENCE = [
   { step: '60_day', days: 60, action: 'FINAL: Determine write-off vs appeal. Contact payer management.', escalation: 2 },
 ];
 
-export function generateFollowUpTasks() {
-  const denials = getDenials().filter(d => d.status === 'Resubmitted' || d.status === 'Appealed');
+export async function generateFollowUpTasks() {
+  const allDenials = await getDenials();
+  const denials = allDenials.filter(d => d.status === 'Resubmitted' || d.status === 'Appealed');
   const now = new Date();
   const tasks: any[] = [];
 
@@ -46,8 +47,8 @@ export function generateFollowUpTasks() {
   return tasks;
 }
 
-export function getFollowUpSummary() {
-  const tasks = generateFollowUpTasks();
+export async function getFollowUpSummary() {
+  const tasks = await generateFollowUpTasks();
   const payerMap = new Map<string, { pending: number; overdue: number; totalDays: number; count: number }>();
   tasks.forEach((t: any) => {
     const e = payerMap.get(t.payerName) || { pending: 0, overdue: 0, totalDays: 0, count: 0 };

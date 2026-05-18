@@ -6,8 +6,8 @@ import { getDenials } from './data';
 import { scrubClaim } from './claim-scrub';
 import { checkAuthRequired, calculateFilingDeadline } from './payer-rules';
 
-export function generatePreventionDashboard() {
-  const denials = getDenials();
+export async function generatePreventionDashboard() {
+  const denials = await getDenials();
   const alerts: any[] = [];
 
   for (const denial of denials.filter(d => !['Closed', 'Resubmitted'].includes(d.status))) {

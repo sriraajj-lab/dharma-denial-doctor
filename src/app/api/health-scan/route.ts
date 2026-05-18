@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { clientName, totalClaimsSubmitted } = body;
 
-    const report = generateHealthScan({ clientName, totalClaimsSubmitted });
+    const report = await generateHealthScan({ clientName, totalClaimsSubmitted });
 
     const currentUser = getCurrentUser();
     createAuditLog({
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     // Default scan with current data
-    const report = generateHealthScan({});
+    const report = await generateHealthScan({});
     return NextResponse.json({ report });
   } catch (error) {
     console.error('Error fetching health scan:', error);

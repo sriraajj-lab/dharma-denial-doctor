@@ -130,11 +130,11 @@ export interface ImprovementAction {
 
 // ─── MAIN FUNCTION ──────────────────────────────────────────────────────────
 
-export function generateHealthScan(options?: {
+export async function generateHealthScan(options?: {
   clientName?: string;
   totalClaimsSubmitted?: number; // needed to calculate denial rate
-}): HealthScanReport {
-  const denials = getDenials();
+}): Promise<HealthScanReport> {
+  const denials = await getDenials();
   const now = new Date();
   const clientName = options?.clientName || 'Client Practice';
   const totalClaimsSubmitted = options?.totalClaimsSubmitted || Math.round(denials.length / 0.12); // estimate 12% denial rate if not provided

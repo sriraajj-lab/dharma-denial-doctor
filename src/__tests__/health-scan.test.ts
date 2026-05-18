@@ -2,19 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { generateHealthScan } from '../lib/health-scan';
 
 describe('Client Health Scan', () => {
-  it('generates a report with overall score between 0-100', () => {
-    const report = generateHealthScan({ clientName: 'Test Practice' });
+  it('generates a report with overall score between 0-100', async () => {
+    const report = await generateHealthScan({ clientName: 'Test Practice' });
     expect(report.overallScore).toBeGreaterThanOrEqual(0);
     expect(report.overallScore).toBeLessThanOrEqual(100);
   });
 
-  it('assigns a valid letter grade', () => {
-    const report = generateHealthScan({});
+  it('assigns a valid letter grade', async () => {
+    const report = await generateHealthScan({});
     expect(['A+', 'A', 'B+', 'B', 'C+', 'C', 'D', 'F']).toContain(report.overallGrade);
   });
 
-  it('has all 5 dimension scores', () => {
-    const report = generateHealthScan({});
+  it('has all 5 dimension scores', async () => {
+    const report = await generateHealthScan({});
     expect(report.dimensions.denialRate).toBeDefined();
     expect(report.dimensions.recoveryPotential).toBeDefined();
     expect(report.dimensions.codingAccuracy).toBeDefined();
@@ -22,8 +22,8 @@ describe('Client Health Scan', () => {
     expect(report.dimensions.payerMixHealth).toBeDefined();
   });
 
-  it('each dimension has score, grade, value, benchmark', () => {
-    const report = generateHealthScan({});
+  it('each dimension has score, grade, value, benchmark', async () => {
+    const report = await generateHealthScan({});
     Object.values(report.dimensions).forEach(dim => {
       expect(dim.score).toBeGreaterThanOrEqual(0);
       expect(dim.score).toBeLessThanOrEqual(100);
@@ -34,8 +34,8 @@ describe('Client Health Scan', () => {
     });
   });
 
-  it('generates payer grades', () => {
-    const report = generateHealthScan({});
+  it('generates payer grades', async () => {
+    const report = await generateHealthScan({});
     expect(Array.isArray(report.payerGrades)).toBe(true);
     report.payerGrades.forEach(pg => {
       expect(pg.payerName).toBeDefined();
@@ -44,8 +44,8 @@ describe('Client Health Scan', () => {
     });
   });
 
-  it('generates improvement plan with priorities', () => {
-    const report = generateHealthScan({});
+  it('generates improvement plan with priorities', async () => {
+    const report = await generateHealthScan({});
     expect(Array.isArray(report.improvementPlan)).toBe(true);
     expect(report.improvementPlan.length).toBeGreaterThan(0);
     report.improvementPlan.forEach((action, idx) => {
@@ -55,14 +55,14 @@ describe('Client Health Scan', () => {
     });
   });
 
-  it('executive summary mentions client name', () => {
-    const report = generateHealthScan({ clientName: 'ABC Ortho' });
+  it('executive summary mentions client name', async () => {
+    const report = await generateHealthScan({ clientName: 'ABC Ortho' });
     expect(report.executiveSummary).toContain('ABC Ortho');
   });
 
-  it('respects totalClaimsSubmitted for denial rate calculation', () => {
-    const report1 = generateHealthScan({ totalClaimsSubmitted: 100 });
-    const report2 = generateHealthScan({ totalClaimsSubmitted: 10000 });
+  it('respects totalClaimsSubmitted for denial rate calculation', async () => {
+    const report1 = await generateHealthScan({ totalClaimsSubmitted: 100 });
+    const report2 = await generateHealthScan({ totalClaimsSubmitted: 10000 });
     // With more total claims, denial rate should be lower
     expect(report2.metrics.denialRate).toBeLessThan(report1.metrics.denialRate);
   });

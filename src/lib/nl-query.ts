@@ -7,10 +7,10 @@ import { getDenials } from './data';
 const PAYER_ALIASES: Record<string, string> = { uhc: 'UnitedHealthcare', united: 'UnitedHealthcare', bcbs: 'Blue Cross', 'blue cross': 'Blue Cross', aetna: 'Aetna', cigna: 'Cigna', humana: 'Humana', medicare: 'Medicare', medicaid: 'Medicaid' };
 const CATEGORY_ALIASES: Record<string, string> = { coding: 'coding_error', 'missing info': 'missing_information', auth: 'authorization', eligibility: 'eligibility', 'medical necessity': 'medical_necessity', timely: 'timely_filing', duplicate: 'duplicate', bundling: 'bundling' };
 
-export function executeNLQuery(query: string) {
+export async function executeNLQuery(query: string) {
   const q = query.toLowerCase().trim();
   const filtersApplied: string[] = [];
-  let denials = getDenials();
+  let denials = await getDenials();
 
   // Payer
   let payerName: string | undefined;

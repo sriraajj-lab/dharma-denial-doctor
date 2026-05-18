@@ -4,8 +4,9 @@
 import { getDenials } from './data';
 import { calculateAppealDeadline } from './payer-rules';
 
-export function getAppealDeadlines() {
-  const denials = getDenials().filter(d => !['Closed'].includes(d.status));
+export async function getAppealDeadlines() {
+  const allDenials = await getDenials();
+  const denials = allDenials.filter(d => !['Closed'].includes(d.status));
   const now = new Date();
   const items: any[] = [];
 
