@@ -58,11 +58,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedDenialId: null,
   selectedReportId: null,
   sidebarOpen: true,
-  contractSigned: false,
+  contractSigned: true,
   currentUser: null,
   sessionToken: null,
-  practiceType: null,
-  accessLevel: null,
+  practiceType: 'medical',
+  accessLevel: 3,
   activeBatchJobs: [],
   notifications: [],
 
@@ -117,8 +117,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ currentView: 'denials', selectedDenialId: null });
     } else if (current === 'overview-report') {
       set({ currentView: 'upload', selectedReportId: null });
+    } else if (current === 'prevention') {
+      set({ currentView: 'dashboard' });
     } else {
-      set({ currentView: 'upload', selectedDenialId: null });
+      set({ currentView: 'dashboard' });
     }
   },
 }));

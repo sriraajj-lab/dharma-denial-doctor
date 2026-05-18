@@ -647,7 +647,14 @@ export type ViewType =
   | 'scrub'
   | 'financials'
   | 'settings'
-  | 'pricing';
+  | 'pricing'
+  | 'worklist'
+  | 'health-scan'
+  | 'nl-query'
+  | 'followup'
+  | 'appeal-deadlines'
+  | 'staff-metrics'
+  | 'prevention';
 
 // ─── ERA/835 TYPES ──────────────────────────────────────────────────────────────
 

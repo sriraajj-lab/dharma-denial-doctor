@@ -11,11 +11,37 @@ const SEVERITY_COLORS: Record<string, string> = { critical: 'border-red-500/50 b
 export function PreventionDashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { fetchData(); }, []);
-  async function fetchData() { setLoading(true); try { const res = await fetch('/api/dashboard?view=prevention'); setData(await res.json()); } catch {} finally { setLoading(false); } }
+  async function fetchData() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/dashboard?view=prevention');
+      if (!res.ok) {
+        throw new Error(`Failed to load prevention data (HTTP ${res.status})`);
+      }
+      const json = await res.json();
+      setData(json);
+    } catch (err: any) {
+      setError(err.message || 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (error) return (
+    <div className="flex flex-col items-center justify-center py-12 gap-4">
+      <AlertTriangle className="h-10 w-10 text-red-400" />
+      <h3 className="text-lg font-semibold text-foreground">Failed to Load Prevention Data</h3>
+      <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
+      <Button onClick={fetchData} variant="outline" size="sm">
+        <RefreshCw className="h-4 w-4 mr-1" /> Try Again
+      </Button>
+    </div>
+  );
   if (!data) return null;
 
   const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;

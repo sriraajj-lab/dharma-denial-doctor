@@ -19,7 +19,6 @@ import {
   Stethoscope,
   Heart,
   Home,
-  CreditCard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,20 +27,19 @@ const navItems: Array<{ view: ViewType; label: string; icon: React.ReactNode; se
   { view: 'upload', label: 'Upload & Scan', icon: <Upload className="h-5 w-5" />, section: 'main' },
   { view: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" />, section: 'main' },
   { view: 'denials', label: 'Denial Queue', icon: <FileText className="h-5 w-5" />, section: 'main' },
-  { view: 'worklist' as any, label: 'AI Worklist', icon: <Activity className="h-5 w-5" />, section: 'main', minLevel: 2 },
+  { view: 'worklist', label: 'AI Worklist', icon: <Activity className="h-5 w-5" />, section: 'main', minLevel: 2 },
   { view: 'agents', label: 'AI Agents', icon: <Bot className="h-5 w-5" />, section: 'main' },
-  { view: 'health-scan' as any, label: 'Health Scan', icon: <Shield className="h-5 w-5" />, section: 'main' },
-  { view: 'nl-query' as any, label: 'Search', icon: <Activity className="h-5 w-5" />, section: 'main' },
+  { view: 'health-scan', label: 'Health Scan', icon: <Shield className="h-5 w-5" />, section: 'main' },
+  { view: 'nl-query', label: 'Search', icon: <Activity className="h-5 w-5" />, section: 'main' },
   { view: 'appeals', label: 'Appeals', icon: <Gavel className="h-5 w-5" />, section: 'management', minLevel: 2 },
-  { view: 'followup' as any, label: 'Follow-ups', icon: <Activity className="h-5 w-5" />, section: 'management', minLevel: 2 },
-  { view: 'appeal-deadlines' as any, label: 'Deadlines', icon: <Activity className="h-5 w-5" />, section: 'management', minLevel: 2 },
-  { view: 'prevention' as any, label: 'Prevention', icon: <ShieldCheck className="h-5 w-5" />, section: 'management' },
+  { view: 'followup', label: 'Follow-ups', icon: <Activity className="h-5 w-5" />, section: 'management', minLevel: 2 },
+  { view: 'appeal-deadlines', label: 'Deadlines', icon: <Activity className="h-5 w-5" />, section: 'management', minLevel: 2 },
+  { view: 'prevention', label: 'Prevention', icon: <ShieldCheck className="h-5 w-5" />, section: 'management' },
   { view: 'scrub', label: 'Claim Scrub', icon: <ShieldCheck className="h-5 w-5" />, section: 'management' },
   { view: 'financials', label: 'Financials', icon: <DollarSign className="h-5 w-5" />, section: 'management' },
   { view: 'payer-rules', label: 'Payer Rules', icon: <BookOpen className="h-5 w-5" />, section: 'settings' },
-  { view: 'staff-metrics' as any, label: 'Staff Metrics', icon: <Activity className="h-5 w-5" />, section: 'settings' },
+  { view: 'staff-metrics', label: 'Staff Metrics', icon: <Activity className="h-5 w-5" />, section: 'settings' },
   { view: 'audit-log', label: 'Audit Log', icon: <ClipboardList className="h-5 w-5" />, section: 'settings' },
-  { view: 'pricing', label: 'Pricing', icon: <CreditCard className="h-5 w-5" />, section: 'settings' },
 ];
 
 export function AppSidebar() {
@@ -69,7 +67,7 @@ export function AppSidebar() {
           <div className="flex items-center gap-2">
             <Shield className="h-7 w-7 text-primary" />
             <div>
-              <h1 className="text-sm font-bold text-sidebar-foreground">Denial Doctor</h1>
+              <h1 className="text-sm font-bold text-sidebar-foreground">Dharma Solutions</h1>
               <div className="flex items-center gap-1.5">
                 {practiceType && (
                   <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
@@ -109,9 +107,7 @@ export function AppSidebar() {
           >
             {item.icon}
             {sidebarOpen && <span>{item.label}</span>}
-            {sidebarOpen && item.view === 'denials' && !contractSigned && (
-              <span className="ml-auto text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">Contract</span>
-            )}
+
           </button>
         ))}
 

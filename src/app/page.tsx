@@ -103,9 +103,8 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Shield className="h-5 w-5 text-primary" />
             <span className="text-sm font-medium text-foreground">
-              Denial Doctor
+              Dharma Solutions
             </span>
-            <span className="text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded ml-1">AI-Powered</span>
             {practiceType && (
               <Badge variant="outline" className={practiceType === 'medical' ? 'bg-primary/10 text-primary border-primary/30' : 'bg-cyan/10 text-cyan border-cyan/30'}>
                 {practiceType === 'medical' ? <Stethoscope className="h-3 w-3 mr-1" /> : <Heart className="h-3 w-3 mr-1" />}
