@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDenialById, updateDenial } from '@/lib/data';
-import { createBatchJob, getBatchJob, getAllBatchJobs, updateBatchJob, addBatchResult, cancelBatchJob } from '@/lib/batch-processor';
 import { batchProcessor } from '@/lib/batch-processor';
 import { callAzureOpenAI, parseJSONResponse, DENIAL_ANALYSIS_PROMPT, CORRECTION_SUGGESTION_PROMPT, QUALITY_CHECKER_PROMPT } from '@/lib/azure-openai';
 import { analyzeDentalDenial } from '@/lib/dental-cdt-codes';
@@ -31,16 +30,13 @@ export async function POST(request: NextRequest) {
     const accessLevel = level || 1;
     const pType = practiceType || 'medical';
 
-    // Create optimized batch job using the new BatchProcessorManager
+    // Create optimized batch job using the BatchProcessorManager
     const managedJob = batchProcessor.createJob(
       denialIds,
       jobType,
       accessLevel,
       config
     );
-
-    // Also create in legacy system for compatibility
-    const legacyJob = createBatchJob({ jobType, denialIds });
 
     createAuditLog({
       action: 'batch_start',
@@ -56,16 +52,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Start processing asynchronously (non-blocking)
-    updateBatchJob(legacyJob.id, { status: 'running', startedAt: new Date().toISOString() });
-
-    // Start the optimized batch processing
-    processLargeBatch(managedJob.id, legacyJob.id, jobType, denialIds, accessLevel, pType);
+    // Start the optimized batch processing asynchronously
+    processLargeBatch(managedJob.id, jobType, denialIds, accessLevel, pType);
 
     return NextResponse.json({
       job: {
-        ...managedJob,
-        legacyJobId: legacyJob.id,
+        id: managedJob.id,
+        jobType: managedJob.jobType,
+        status: managedJob.status,
+        totalItems: managedJob.totalItems,
         config: {
           chunkSize: managedJob.config.chunkSize,
           maxConcurrency: managedJob.config.maxConcurrency,
@@ -84,40 +79,25 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('id');
-    const managedJobId = searchParams.get('managedId');
     const status = searchParams.get('status');
     const jobType = searchParams.get('jobType');
 
-    // Check managed job first
-    if (managedJobId) {
-      const managedJob = batchProcessor.getJob(managedJobId);
-      if (managedJob) {
-        const progress = batchProcessor.getProgress(managedJobId);
-        const eta = batchProcessor.getEstimatedTimeRemaining(managedJobId);
-        return NextResponse.json({
-          job: managedJob,
-          progress,
-          estimatedTimeRemainingMinutes: eta,
-        });
-      }
-    }
-
     if (jobId) {
-      const job = getBatchJob(jobId);
-      if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-      return NextResponse.json({ job });
+      const managedJob = batchProcessor.getJob(jobId);
+      if (!managedJob) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+      const progress = batchProcessor.getProgress(jobId);
+      const eta = batchProcessor.getEstimatedTimeRemaining(jobId);
+      return NextResponse.json({
+        job: managedJob,
+        progress,
+        estimatedTimeRemainingMinutes: eta,
+      });
     }
-
-    const jobs = getAllBatchJobs({
-      status: status || undefined,
-      jobType: jobType || undefined,
-    });
 
     const managedJobs = batchProcessor.getAllJobs();
 
     return NextResponse.json({
-      jobs,
-      managedJobs: managedJobs.map(j => ({
+      jobs: managedJobs.map(j => ({
         id: j.id,
         jobType: j.jobType,
         status: j.status,
@@ -139,26 +119,17 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('id');
-    const managedJobId = searchParams.get('managedId');
-
-    if (managedJobId) {
-      const cancelled = batchProcessor.cancelJob(managedJobId);
-      if (!cancelled) {
-        return NextResponse.json({ error: 'Job not found or already completed' }, { status: 404 });
-      }
-      return NextResponse.json({ message: 'Managed job cancelled', jobId: managedJobId });
-    }
 
     if (!jobId) {
       return NextResponse.json({ error: 'Job ID required' }, { status: 400 });
     }
 
-    const job = cancelBatchJob(jobId);
-    if (!job) {
+    const cancelled = batchProcessor.cancelJob(jobId);
+    if (!cancelled) {
       return NextResponse.json({ error: 'Job not found or already completed' }, { status: 404 });
     }
 
-    return NextResponse.json({ job });
+    return NextResponse.json({ message: 'Job cancelled', jobId });
   } catch (error) {
     console.error('Error cancelling batch job:', error);
     return NextResponse.json({ error: 'Failed to cancel batch job' }, { status: 500 });
@@ -170,7 +141,6 @@ export async function DELETE(request: NextRequest) {
  */
 async function processLargeBatch(
   managedJobId: string,
-  legacyJobId: string,
   jobType: string,
   denialIds: string[],
   level: number,
@@ -202,15 +172,11 @@ async function processLargeBatch(
         practiceType,
       });
 
-      let newStatus = '';
-
       // Level-based processing depth
       switch (jobType) {
         case 'analyze':
         case 'batch_scan': {
-          // Level 1: Quick scan
           if (practiceType === 'dental') {
-            // Use dental-specific analysis
             const dentalAnalysis = analyzeDentalDenial(denial);
             await updateDenial(denialId, {
               status: 'Analyzed',
@@ -234,19 +200,16 @@ async function processLargeBatch(
             return { success: true };
           }
 
-          // Medical analysis via AI
           const responseText = await callAzureOpenAI(DENIAL_ANALYSIS_PROMPT, `Analyze this denied claim:\n${claimData}`);
           const parsed = parseJSONResponse(responseText);
           await updateDenial(denialId, {
             status: 'Analyzed',
             analysis: { ...parsed, analyzedAt: new Date().toISOString() },
           } as any);
-          newStatus = 'Analyzed';
-          break;
+          return { success: true };
         }
         case 'correct':
         case 'batch_fix': {
-          // Level 2: Full fix with pre-auth letters
           if (practiceType === 'dental') {
             const dentalAnalysis = analyzeDentalDenial(denial);
             const responseText = await callAzureOpenAI(
@@ -273,8 +236,7 @@ async function processLargeBatch(
               correction: { ...parsed, createdAt: new Date().toISOString() },
             } as any);
           }
-          newStatus = 'Corrected';
-          break;
+          return { success: true };
         }
         case 'quality_check': {
           const responseText = await callAzureOpenAI(
@@ -286,33 +248,27 @@ async function processLargeBatch(
             status: 'Reviewed',
             qualityCheck: { ...parsed, checkedAt: new Date().toISOString() },
           } as any);
-          newStatus = 'Reviewed';
-          break;
+          return { success: true };
         }
         case 'appeal_generate': {
-          // Level 2+3: Generate appeal letters
           const responseText = await callAzureOpenAI(
             'You are a medical/dental appeal letter writer. Generate a professional first-level appeal letter for the following denied claim. Include: 1) Patient and claim info 2) Clinical justification 3) References to LCD/NCD or ADA guidelines 4) Request for review. Return the letter as plain text.',
             `Generate appeal letter for:\n${claimData}\nAnalysis: ${JSON.stringify(denial.analysis || {})}\nCorrection: ${JSON.stringify(denial.correction || {})}`
           );
           await updateDenial(denialId, { status: 'Appealed' } as any);
-          newStatus = 'Appealed';
-          break;
+          return { success: true };
         }
+        default:
+          return { success: false, error: `Unknown job type: ${jobType}` };
       }
-
-      // Also update legacy job
-      addBatchResult(legacyJobId, { denialId, success: true });
-      return { success: true };
     } catch (error) {
-      addBatchResult(legacyJobId, { denialId, success: false, error: String(error) });
       return { success: false, error: String(error) };
     }
   };
 
   // Start the managed batch processor
-  await batchProcessor.startJob(managedJobId, processItem, (job) => {
-    // Progress callback - can be used for real-time updates via WebSocket
+  await batchProcessor.startJob(managedJobId, processItem, () => {
+    // Progress callback
   });
 
   // Final audit log
@@ -339,7 +295,6 @@ async function processLargeBatch(
  * Estimate processing duration based on volume, level, and job type
  */
 function estimateDuration(totalClaims: number, level: number, jobType: string): string {
-  // Base time per claim in seconds
   const baseTimes: Record<string, Record<number, number>> = {
     analyze: { 1: 0.5, 2: 2, 3: 3 },
     correct: { 1: 1, 2: 5, 3: 8 },
