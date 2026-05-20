@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useAppStore } from '@/lib/store';
 import { LandingView } from '@/components/landing-view';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -8,7 +9,6 @@ import { DenialsView } from '@/components/denials-view';
 import { DenialDetailView } from '@/components/denial-detail-view';
 import { UploadView } from '@/components/upload-view';
 import { AgentsView } from '@/components/agents-view';
-import { OverviewReportView } from '@/components/overview-report-view';
 import { WorklistView } from '@/components/worklist-view';
 import { PreventionDashboard } from '@/components/prevention-dashboard';
 import { FollowUpView } from '@/components/followup-view';
@@ -21,11 +21,12 @@ import { AuditLogView } from '@/components/audit-log-view';
 import { ScrubView } from '@/components/scrub-view';
 import { FinancialsView } from '@/components/financials-view';
 import { HealthScanView } from '@/components/health-scan-view';
+import { FixReportView } from '@/components/fix-report-view';
 import { Shield, User, Heart, Stethoscope } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export default function Home() {
-  const { currentView, sidebarOpen, currentUser, practiceType } = useAppStore();
+  const { currentView, sidebarOpen, contractSigned, currentUser, practiceType, accessLevel } = useAppStore();
 
   // Show Landing Page if no practice type selected
   if (currentView === 'landing' || !practiceType) {
@@ -70,9 +71,26 @@ export default function Home() {
         return <ScrubView />;
       case 'financials':
         return <FinancialsView />;
+      case 'fix-report':
+        return <FixReportView />;
       default:
         return <UploadView />;
     }
+  };
+
+  const getLevelBadge = () => {
+    if (!accessLevel) return null;
+    const colors = {
+      1: 'bg-cyan/20 text-cyan border-cyan/30',
+      2: 'bg-emerald/20 text-emerald border-emerald/30',
+      3: 'bg-primary/20 text-primary border-primary/30',
+    };
+    const names = { 1: 'Scan & Score', 2: 'Fix & Appeal', 3: 'EHR Auto-Fix' };
+    return (
+      <Badge variant="outline" className={colors[accessLevel]}>
+        L{accessLevel}: {names[accessLevel]}
+      </Badge>
+    );
   };
 
   return (
@@ -87,29 +105,28 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Shield className="h-5 w-5 text-primary" />
             <span className="text-sm font-medium text-foreground">
-              Dharma Solutions
+              Denials Doctor
             </span>
+            <span className="text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded ml-1">AI-Powered</span>
             {practiceType && (
               <Badge variant="outline" className={practiceType === 'medical' ? 'bg-primary/10 text-primary border-primary/30' : 'bg-cyan/10 text-cyan border-cyan/30'}>
                 {practiceType === 'medical' ? <Stethoscope className="h-3 w-3 mr-1" /> : <Heart className="h-3 w-3 mr-1" />}
                 {practiceType === 'medical' ? 'Medical' : 'Dental'}
               </Badge>
             )}
-            <Badge variant="outline" className="bg-emerald/20 text-emerald border-emerald/30">
-              Full Access
-            </Badge>
+            {getLevelBadge()}
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-emerald animate-pulse" />
-              <span className="text-xs text-muted-foreground">Internal Staff</span>
+              <span className="text-xs text-muted-foreground">{contractSigned ? 'Full Access' : 'Overview Only'}</span>
             </div>
             <div className="flex items-center gap-2 border-l border-border pl-3">
               <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
                 <User className="h-4 w-4 text-primary" />
               </div>
               <div className="hidden md:block">
-                <p className="text-xs font-medium text-foreground">{currentUser?.name || 'Dharma Staff'}</p>
+                <p className="text-xs font-medium text-foreground">{currentUser?.name || 'System Admin'}</p>
                 <p className="text-[10px] text-muted-foreground capitalize">{currentUser?.role || 'admin'}</p>
               </div>
             </div>
@@ -127,6 +144,9 @@ export default function Home() {
 
 function OverviewReportPlaceholder() {
   const { setCurrentView } = useAppStore();
-  setCurrentView('upload');
+  // Use useEffect to avoid setState during render
+  React.useEffect(() => {
+    setCurrentView('upload');
+  }, [setCurrentView]);
   return null;
 }

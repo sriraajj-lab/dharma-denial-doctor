@@ -20,6 +20,8 @@ import {
   Users,
   MessageSquare,
   Gavel,
+  Lock,
+  Cpu,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -69,7 +71,10 @@ export function DenialDetailView() {
   const [correcting, setCorrecting] = useState(false);
   const [qualityChecking, setQualityChecking] = useState(false);
   const [activeTab, setActiveTab] = useState<'analysis' | 'correction' | 'quality' | 'smart-correct' | 'eligibility' | 'notes' | 'appeal'>('analysis');
-  const { selectedDenialId, navigateBack } = useAppStore();
+  const { selectedDenialId, navigateBack, accessLevel, setCurrentView, setAccessLevel } = useAppStore();
+  const isL1 = accessLevel === 1;
+  const isL2OrAbove = accessLevel !== null && accessLevel >= 2;
+  const isL3 = accessLevel === 3;
 
   useEffect(() => {
     if (selectedDenialId) {
@@ -267,7 +272,7 @@ export function DenialDetailView() {
             </CardContent>
           </Card>
 
-          {/* Action Buttons */}
+          {/* Action Buttons - Level Gated */}
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -275,51 +280,83 @@ export function DenialDetailView() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 space-y-3">
-              <Button
-                onClick={runAnalysis}
-                disabled={analyzing || denial.status !== 'New'}
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                {analyzing ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Analyzing...</>
-                ) : (
-                  <><Bot className="h-4 w-4 mr-2" /> Run Analysis Agent</>
-                )}
-              </Button>
-              <Button
-                onClick={runCorrection}
-                disabled={correcting || !denial.analysis || denial.status === 'New'}
-                variant="outline"
-                className="w-full border-primary/50 text-primary hover:bg-primary/10"
-              >
-                {correcting ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating Correction...</>
-                ) : (
-                  <><Wrench className="h-4 w-4 mr-2" /> Run Correction Agent</>
-                )}
-              </Button>
-              <Button
-                onClick={runQualityCheck}
-                disabled={qualityChecking || !denial.correction || denial.status === 'New' || denial.status === 'Analyzed'}
-                variant="outline"
-                className="w-full border-emerald/50 text-emerald hover:bg-emerald/10"
-              >
-                {qualityChecking ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Quality Checking...</>
-                ) : (
-                  <><ShieldCheck className="h-4 w-4 mr-2" /> Run Quality Checker</>
-                )}
-              </Button>
-              <Separator className="bg-border" />
-              {denial.status === 'Reviewed' && (
-                <Button onClick={handleResubmit} className="w-full bg-green-600 hover:bg-green-700 text-white">
-                  <RefreshCw className="h-4 w-4 mr-2" /> Mark as Resubmitted
-                </Button>
-              )}
-              {denial.status === 'Resubmitted' && (
-                <Button onClick={handleClose} variant="outline" className="w-full border-border">
-                  <CheckCircle2 className="h-4 w-4 mr-2" /> Close Claim
-                </Button>
+              {isL1 ? (
+                /* Level 1: Locked - Show upgrade CTA */
+                <div className="space-y-3">
+                  <div className="rounded-lg bg-cyan/10 border border-cyan/20 p-4 text-center">
+                    <Lock className="h-6 w-6 text-cyan mx-auto mb-2" />
+                    <p className="text-sm font-medium text-foreground">AI Agents Locked</p>
+                    <p className="text-xs text-muted-foreground mt-1">Upgrade to Level 2 to unlock AI analysis, corrections, and appeal generation for individual claims.</p>
+                  </div>
+                  <Button
+                    onClick={() => { setAccessLevel(2); setCurrentView('landing'); }}
+                    className="w-full bg-emerald hover:bg-emerald/90 text-white"
+                  >
+                    <Zap className="h-4 w-4 mr-2" /> Upgrade to Level 2
+                  </Button>
+                </div>
+              ) : (
+                /* Level 2+: Full agent actions */
+                <>
+                  <Button
+                    onClick={runAnalysis}
+                    disabled={analyzing || denial.status !== 'New'}
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    {analyzing ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Analyzing...</>
+                    ) : (
+                      <><Bot className="h-4 w-4 mr-2" /> Run Analysis Agent</>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={runCorrection}
+                    disabled={correcting || !denial.analysis || denial.status === 'New'}
+                    variant="outline"
+                    className="w-full border-primary/50 text-primary hover:bg-primary/10"
+                  >
+                    {correcting ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating Correction...</>
+                    ) : (
+                      <><Wrench className="h-4 w-4 mr-2" /> Run Correction Agent</>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={runQualityCheck}
+                    disabled={qualityChecking || !denial.correction || denial.status === 'New' || denial.status === 'Analyzed'}
+                    variant="outline"
+                    className="w-full border-emerald/50 text-emerald hover:bg-emerald/10"
+                  >
+                    {qualityChecking ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Quality Checking...</>
+                    ) : (
+                      <><ShieldCheck className="h-4 w-4 mr-2" /> Run Quality Checker</>
+                    )}
+                  </Button>
+                  <Separator className="bg-border" />
+                  {isL3 && (
+                    <div className="rounded-lg bg-primary/10 border border-primary/20 p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Cpu className="h-4 w-4 text-primary" />
+                        <span className="text-xs font-medium text-primary">Level 3: Auto-Fix</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Autonomous correction and resubmission through EHR integration.</p>
+                      <Badge variant="outline" className="mt-2 bg-primary/10 text-primary border-primary/30 text-[10px]">
+                        Coming Soon
+                      </Badge>
+                    </div>
+                  )}
+                  {denial.status === 'Reviewed' && (
+                    <Button onClick={handleResubmit} className="w-full bg-green-600 hover:bg-green-700 text-white">
+                      <RefreshCw className="h-4 w-4 mr-2" /> Mark as Resubmitted
+                    </Button>
+                  )}
+                  {denial.status === 'Resubmitted' && (
+                    <Button onClick={handleClose} variant="outline" className="w-full border-border">
+                      <CheckCircle2 className="h-4 w-4 mr-2" /> Close Claim
+                    </Button>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -327,65 +364,112 @@ export function DenialDetailView() {
 
         {/* Right: AI Panels */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Tab Selection */}
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setActiveTab('analysis')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
-                activeTab === 'analysis' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Bot className="h-4 w-4 inline mr-1" /> Analysis
-            </button>
-            <button
-              onClick={() => setActiveTab('correction')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
-                activeTab === 'correction' ? 'bg-orange-500 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Wrench className="h-4 w-4 inline mr-1" /> Correction
-            </button>
-            <button
-              onClick={() => setActiveTab('smart-correct')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
-                activeTab === 'smart-correct' ? 'bg-violet-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Zap className="h-4 w-4 inline mr-1" /> Smart Correct
-            </button>
-            <button
-              onClick={() => setActiveTab('eligibility')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
-                activeTab === 'eligibility' ? 'bg-teal-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Users className="h-4 w-4 inline mr-1" /> Eligibility
-            </button>
-            <button
-              onClick={() => setActiveTab('quality')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
-                activeTab === 'quality' ? 'bg-emerald text-emerald-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <ShieldCheck className="h-4 w-4 inline mr-1" /> Quality
-            </button>
-            <button
-              onClick={() => setActiveTab('appeal')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
-                activeTab === 'appeal' ? 'bg-amber-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Gavel className="h-4 w-4 inline mr-1" /> Appeal
-            </button>
-            <button
-              onClick={() => setActiveTab('notes')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
-                activeTab === 'notes' ? 'bg-sky-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <MessageSquare className="h-4 w-4 inline mr-1" /> Notes
-            </button>
-          </div>
+          {/* Level 1: Locked Panel */}
+          {isL1 && (
+            <Card className="border-cyan/30 bg-cyan/5">
+              <CardContent className="p-8">
+                <div className="flex flex-col items-center justify-center text-center">
+                  <div className="h-20 w-20 rounded-full bg-cyan/10 flex items-center justify-center mb-4">
+                    <Lock className="h-10 w-10 text-cyan" />
+                  </div>
+                  <h3 className="text-xl font-bold text-foreground">Level 1: Diagnostic Only</h3>
+                  <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                    Your current plan includes scan, score, and pain point identification only.
+                    Upgrade to Level 2 to unlock AI analysis, smart corrections, appeal generation, and step-by-step fix instructions for every claim.
+                  </p>
+                  <div className="flex items-center gap-4 mt-6">
+                    <Button
+                      onClick={() => { setAccessLevel(2); setCurrentView('landing'); }}
+                      className="bg-emerald hover:bg-emerald/90 text-white"
+                    >
+                      <Zap className="h-4 w-4 mr-2" /> Upgrade to Level 2 - Fix & Appeal
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-6 max-w-sm">
+                    <div className="rounded-lg bg-secondary p-3 text-center">
+                      <span className="text-xs text-muted-foreground block">L2 Includes</span>
+                      <span className="text-sm font-bold text-emerald">AI Analysis</span>
+                    </div>
+                    <div className="rounded-lg bg-secondary p-3 text-center">
+                      <span className="text-xs text-muted-foreground block">L2 Includes</span>
+                      <span className="text-sm font-bold text-emerald">Corrections</span>
+                    </div>
+                    <div className="rounded-lg bg-secondary p-3 text-center">
+                      <span className="text-xs text-muted-foreground block">L2 Includes</span>
+                      <span className="text-sm font-bold text-emerald">Appeals</span>
+                    </div>
+                    <div className="rounded-lg bg-secondary p-3 text-center">
+                      <span className="text-xs text-muted-foreground block">L2 Includes</span>
+                      <span className="text-sm font-bold text-emerald">Fix Report</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Level 2+: Tab Selection and Panels */}
+          {isL2OrAbove && (
+            <>
+              {/* Tab Selection */}
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setActiveTab('analysis')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                    activeTab === 'analysis' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Bot className="h-4 w-4 inline mr-1" /> Analysis
+                </button>
+                <button
+                  onClick={() => setActiveTab('correction')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                    activeTab === 'correction' ? 'bg-orange-500 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Wrench className="h-4 w-4 inline mr-1" /> Correction
+                </button>
+                <button
+                  onClick={() => setActiveTab('smart-correct')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                    activeTab === 'smart-correct' ? 'bg-violet-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Zap className="h-4 w-4 inline mr-1" /> Smart Correct
+                </button>
+                <button
+                  onClick={() => setActiveTab('eligibility')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                    activeTab === 'eligibility' ? 'bg-teal-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Users className="h-4 w-4 inline mr-1" /> Eligibility
+                </button>
+                <button
+                  onClick={() => setActiveTab('quality')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                    activeTab === 'quality' ? 'bg-emerald text-emerald-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <ShieldCheck className="h-4 w-4 inline mr-1" /> Quality
+                </button>
+                <button
+                  onClick={() => setActiveTab('appeal')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                    activeTab === 'appeal' ? 'bg-amber-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Gavel className="h-4 w-4 inline mr-1" /> Appeal
+                </button>
+                <button
+                  onClick={() => setActiveTab('notes')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-smooth ${
+                    activeTab === 'notes' ? 'bg-sky-600 text-white' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <MessageSquare className="h-4 w-4 inline mr-1" /> Notes
+                </button>
+              </div>
 
           {/* Analysis Panel */}
           {activeTab === 'analysis' && (
@@ -420,6 +504,8 @@ export function DenialDetailView() {
           {/* Notes Panel */}
           {activeTab === 'notes' && (
             <NotesPanel denialId={denial.id} />
+          )}
+            </>
           )}
         </div>
       </div>

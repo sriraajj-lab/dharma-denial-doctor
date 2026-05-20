@@ -648,13 +648,7 @@ export type ViewType =
   | 'financials'
   | 'settings'
   | 'pricing'
-  | 'worklist'
-  | 'health-scan'
-  | 'nl-query'
-  | 'followup'
-  | 'appeal-deadlines'
-  | 'staff-metrics'
-  | 'prevention';
+  | 'fix-report';
 
 // ─── ERA/835 TYPES ──────────────────────────────────────────────────────────────
 
