@@ -72,6 +72,9 @@ export async function createDenial(data: Omit<Denial, 'id' | 'createdAt' | 'upda
         dateOfService: data.dateOfService,
         denialDate: data.denialDate,
         cptCode: data.cptCode,
+        cdtCode: data.cdtCode,
+        codeType: data.codeType || 'CPT',
+        practiceType: data.practiceType || 'medical',
         modifier: data.modifier,
         diagnosisCode: data.diagnosisCode,
         diagnosisCode2: data.diagnosisCode2,
@@ -214,6 +217,16 @@ export async function updateDenial(id: string, updates: Partial<Denial>): Promis
     console.error('[DataLayer] Prisma updateDenial error:', error);
     return null;
   }
+}
+
+/**
+ * Add denials from CSV import (used by the Normalizer Layer).
+ * Accepts full Denial objects (with id) from the CSV normalizer
+ * and persists them via bulkCreateDenials.
+ */
+export async function addDenials(denials: Denial[]): Promise<Denial[]> {
+  const denialsWithoutIds = denials.map(({ id, createdAt, updatedAt, analysis, correction, qualityCheck, appeals, notes, assignments, financials, ...rest }) => rest);
+  return bulkCreateDenials(denialsWithoutIds);
 }
 
 export async function bulkCreateDenials(newDenials: Array<Omit<Denial, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Denial[]> {
@@ -405,6 +418,8 @@ function mapDenialFromDB(record: Record<string, unknown>): Denial {
     dateOfService: record.dateOfService as string,
     denialDate: record.denialDate as string,
     cptCode: record.cptCode as string,
+    cdtCode: (record.cdtCode as string) || undefined,
+    codeType: ((record.codeType as string) === 'CDT' ? 'CDT' : 'CPT'),
     modifier: (record.modifier as string) || undefined,
     diagnosisCode: record.diagnosisCode as string,
     diagnosisCode2: (record.diagnosisCode2 as string) || undefined,
@@ -424,6 +439,7 @@ function mapDenialFromDB(record: Record<string, unknown>): Denial {
     filingDeadlineDays: (record.filingDeadlineDays as number) || undefined,
     isTimelyFilingRisk: (record.isTimelyFilingRisk as boolean) || false,
     batchId: (record.batchId as string) || undefined,
+    practiceType: ((record.practiceType as string) === 'dental' ? 'dental' : 'medical'),
     analysis: analysis ? {
       denialSummary: analysis.denialSummary as string,
       rootCauseCategory: analysis.rootCauseCategory as string,

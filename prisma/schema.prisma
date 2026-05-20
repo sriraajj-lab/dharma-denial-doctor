@@ -57,6 +57,9 @@ model Denial {
   dateOfService       String
   denialDate          String
   cptCode             String
+  cdtCode             String?
+  codeType            String   @default("CPT")  // CPT or CDT
+  practiceType        String   @default("medical")  // medical or dental
   modifier            String?
   diagnosisCode       String
   diagnosisCode2      String?

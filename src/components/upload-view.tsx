@@ -52,12 +52,33 @@ export function UploadView() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || 'Upload failed');
+        // Show detailed error with format detection info
+        const errorMsg = data.error || 'Upload failed';
+        const formatInfo = data.detectedFormat ? `\n\nDetected format: ${data.detectedFormat}` : '';
+        const unmappedInfo = data.unmappedColumns?.length > 0 ? `\nUnmapped columns: ${data.unmappedColumns.slice(0, 5).join(', ')}` : '';
+        const warningInfo = data.warnings?.length > 0 ? `\n\n${data.warnings.slice(0, 2).join('\n')}` : '';
+        toast.error(`${errorMsg}${formatInfo}${unmappedInfo}${warningInfo}`, { duration: 8000 });
         return;
       }
 
       setReport(data.report || data);
-      toast.success(`Overview scan complete! Claims analyzed`);
+
+      // Show normalization info
+      const normalization = data.normalization;
+      if (normalization) {
+        const formatName = normalization.detectedFormatName || 'Unknown';
+        const stats = normalization.stats;
+        toast.success(`Overview scan complete! ${stats?.successfulRows || 0} claims analyzed from ${formatName} format`, { duration: 5000 });
+
+        // Show warnings if any
+        if (normalization.warnings?.length > 0) {
+          setTimeout(() => {
+            toast.warning(`Format note: ${normalization.warnings[0].warning}`, { duration: 6000 });
+          }, 1000);
+        }
+      } else {
+        toast.success(`Overview scan complete! Claims analyzed`);
+      }
     } catch (error) {
       console.error('Upload error:', error);
       toast.error('Failed to upload file');
@@ -299,8 +320,11 @@ export function UploadView() {
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold">
-                Required CSV Format ({practiceType === 'dental' ? 'Dental CDT' : 'Medical CPT'})
+                Supported Billing Formats
               </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Auto-detects your billing software format. Standard columns shown below.
+              </p>
             </CardHeader>
             <CardContent className="p-4">
               <div className="max-h-96 overflow-y-auto">
@@ -355,6 +379,43 @@ export function UploadView() {
                   </tbody>
                 </table>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Supported Billing Systems */}
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Shield className="h-4 w-4 text-cyan" />
+                Auto-Detected Billing Systems
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground mb-3">
+                Upload your CSV and we automatically detect the billing software format. No manual mapping needed.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { name: 'eClinicalWorks', short: 'eCW' },
+                  { name: 'Epic Systems', short: 'Epic' },
+                  { name: 'Athenahealth', short: 'Athena' },
+                  { name: 'Cerner / Oracle Health', short: 'Cerner' },
+                  { name: 'AdvancedMD', short: 'AdvMD' },
+                  { name: 'Kareo / Tebra', short: 'Kareo' },
+                  { name: 'Waystar', short: 'Waystar' },
+                  { name: 'Availity ERA/835', short: '835' },
+                  { name: 'DrChrono', short: 'DrC' },
+                  { name: 'Generic ERA Export', short: 'ERA' },
+                ].map((sys) => (
+                  <div key={sys.name} className="flex items-center gap-2 rounded-lg bg-secondary p-2">
+                    <CheckCircle2 className="h-3 w-3 text-emerald flex-shrink-0" />
+                    <span className="text-xs text-foreground">{sys.name}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Plus any CSV with standard healthcare columns (claim number, patient, payer, CPT, amounts, CARC codes).
+              </p>
             </CardContent>
           </Card>
 
@@ -414,7 +475,7 @@ function OverviewScanView({ report, signing, signerName, setSignerName, onSign, 
   onNavigateToDenials: () => void;
   onNavigateToReport: () => void;
 }) {
-  const { practiceType } = useAppStore();
+  const { practiceType, setCurrentView } = useAppStore();
   const isSigned = report.contractStatus === 'signed';
 
   const getRatingColor = (rating: number) => {
