@@ -456,7 +456,7 @@ export const LEVEL_CONFIGS: LevelConfig[] = [
       'Automatic appeal filing & follow-up',
       'FHIR R4 & X12 EDI compliant',
       'Clearinghouse API integration (Availity, Stedi)',
-      '16 AI agents working 24/7 autonomously',
+      '6 AI agents working 24/7 autonomously',
       'Dedicated account manager',
     ],
     color: 'text-primary',
