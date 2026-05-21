@@ -1,20 +1,24 @@
 /**
- * Agent 5: Appeal Agent
+ * Agent 5: Appeal Agent (ENHANCED with Brain)
  *
  * SCOPE: Generate appeal strategies and letters with cited regulations, LCDs, payer policies
  * HANDLES: All denial categories where appeal is recommended
  * FORBIDDEN: Cannot change codes, cannot verify eligibility, cannot modify claims
  *
- * Anti-Hallucination:
+ * Anti-Hallucination (ENHANCED):
  * - Must cite REAL regulation/policy numbers (42 CFR, LCD numbers, AMA CPT guidelines)
  * - If it can't find a real citation, it says "Manual research needed" — NEVER invents citations
- * - Appeal letters are TEMPLATE-BASED with fill-in fields, not free-form AI text
+ * - Brain generates AI-powered appeal letters (GPT + Claude cross-validated)
+ * - Template-based letters available as fallback when AI is unavailable
+ * - ALL AI-generated letters require human review before submission
  * - All factual claims in the letter must have a source reference
+ * - Cross-validation: If GPT and Claude disagree on appeal strategy, both opinions shown
  */
 
 import { z } from 'zod';
 import { BaseAgentV2, AgentTaskResult } from './base-agent-v2';
 import { denialDataTool, resubmissionIntelligenceTool, appealsTool, codingIntelligenceTool } from './tool-registry';
+import { getBrain, generateAppealLetter as brainGenerateAppealLetter, type BrainResult } from '../brain';
 import { db } from '../db';
 
 // ─── OUTPUT SCHEMA ────────────────────────────────────────────────────────────
@@ -25,7 +29,7 @@ export const AppealOutputSchema = z.object({
     approach: z.string(),
     keyArguments: z.array(z.object({
       argument: z.string(),
-      citation: z.string().nullable(), // Must be real citation or explicitly null
+      citation: z.string().nullable(),
       citationType: z.enum(['regulation', 'lcd', 'ncd', 'payer_policy', 'clinical_guideline', 'none']).nullable(),
       confidenceInCitation: z.number().min(0).max(1),
     })),
@@ -50,6 +54,12 @@ export const AppealOutputSchema = z.object({
       verified: z.boolean(),
     })),
     disclaimer: z.string(),
+    aiGenerated: z.boolean().optional(),
+    crossValidated: z.boolean().optional(),
+    providerOpinions: z.array(z.object({
+      provider: z.string(),
+      opinion: z.string(),
+    })).nullable().optional(),
   }),
   confidenceScore: z.number().min(0).max(1),
   requiresHumanReview: z.boolean(),
@@ -89,7 +99,7 @@ const VERIFIED_CITATIONS: CitationEntry[] = [
   { id: 'ama_cpt', type: 'clinical_guideline', reference: 'AMA CPT Guidelines', description: 'Current Procedural Terminology coding guidelines', applicableCategories: ['coding_error', 'bundling'] },
 ];
 
-// ─── APPEAL LETTER TEMPLATES ───────────────────────────────────────────────────
+// ─── APPEAL LETTER TEMPLATES (FALLBACK) ────────────────────────────────────────
 
 interface LetterTemplate {
   type: string;
@@ -268,7 +278,7 @@ export class AppealAgent extends BaseAgentV2 {
   constructor() {
     super(
       'appeal-agent',
-      'Generates appeal strategies and template-based letters with verified regulatory citations. Never invents citations.',
+      'Generates appeal strategies and AI-powered letters with verified regulatory citations. Uses Brain (GPT + Claude) for letter generation with templates as fallback. Never invents citations.',
       {
         allowedDenialCodes: [], // All codes — appeals can be filed for any denial
         allowedOperations: [
@@ -347,19 +357,78 @@ export class AppealAgent extends BaseAgentV2 {
 
       const deadlineDays = (appealInfo?.deadlineDays as number) || 60;
 
-      // ─── STEP 7: Build letter template ─────────────────────────────────
-      const templateKey = LETTER_TEMPLATES[denialCategory] ? denialCategory : 'default';
-      const template = LETTER_TEMPLATES[templateKey];
+      // ─── STEP 7: Generate letter via Brain (AI-powered, cross-validated) ──
+      let letterTemplate: AppealOutput['letterTemplate'];
+      let aiGenerated = false;
+      let crossValidated = false;
+      let providerOpinions: AppealOutput['letterTemplate']['providerOpinions'] = null;
 
-      // Build citations for the letter from verified sources only
-      const citationsInLetter = this.getCitationsForLetter(denialCategory, codingInfo);
+      try {
+        const claimData = {
+          claimNumber: denial.claimNumber,
+          patientName: denial.patientName,
+          dateOfService: denial.dateOfService,
+          payerName,
+          payerId: denial.payerId,
+          providerNPI: denial.providerNPI,
+          cptCode: denial.cptCode,
+          modifier: denial.modifier,
+          diagnosisCode: denial.diagnosisCode,
+          billedAmount: denial.billedAmount,
+          deniedAmount: denial.deniedAmount,
+          carcCode,
+          rarcCode: denial.rarcCode,
+          denialCategory,
+          denialDate: denial.denialDate,
+          appealLevel,
+        };
+
+        const brainResult = await brainGenerateAppealLetter(claimData);
+
+        if (brainResult.content && brainResult.confidence > 0.3) {
+          // Brain generated an AI letter
+          aiGenerated = true;
+          crossValidated = brainResult.crossValidated;
+
+          if (brainResult.crossValidated && brainResult.crossValidation) {
+            providerOpinions = brainResult.crossValidation.providerResults.map(r => ({
+              provider: r.provider,
+              opinion: r.content.substring(0, 300) + (r.content.length > 300 ? '...' : ''),
+            }));
+          }
+
+          const crossValDisclaimer = crossValidated
+            ? `\n\nIMPORTANT: This letter was generated using AI and cross-validated by ${brainResult.providers.join(' + ')}. ${brainResult.crossValidation?.agreement === 'full' ? 'Both AI models agree on the appeal strategy.' : 'AI models had differing opinions — human review is critical.'} It MUST be reviewed and approved by qualified staff before submission. All citations and factual claims must be verified against current regulations and payer policies.`
+            : '\n\nIMPORTANT: This letter was generated using AI. It MUST be reviewed and approved by qualified staff before submission. All citations and factual claims must be verified against current regulations and payer policies.';
+
+          letterTemplate = {
+            templateType: `ai_generated_${denialCategory}`,
+            subject: `Appeal of Denial — ${denialCategory.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} — Claim ${denial.claimNumber}`,
+            body: brainResult.content + crossValDisclaimer,
+            fillInFields: [], // AI-generated letters don't use fill-in fields — they're already personalized
+            citationsInLetter: this.getCitationsForLetter(denialCategory, codingInfo),
+            disclaimer: crossValDisclaimer.trim(),
+            aiGenerated: true,
+            crossValidated,
+            providerOpinions,
+          };
+        } else {
+          // Brain failed or low confidence — use template
+          letterTemplate = this.getTemplateLetter(denialCategory, codingInfo);
+        }
+      } catch (brainError) {
+        // Brain failed — use template as fallback
+        console.warn('[AppealAgent] Brain letter generation failed, using template:', brainError);
+        letterTemplate = this.getTemplateLetter(denialCategory, codingInfo);
+      }
 
       // ─── STEP 8: Calculate confidence ──────────────────────────────────
       let confidence = 0.5;
       if (prediction?.predictedSuccessRate >= 60) confidence += 0.15;
-      if (citationsInLetter.some(c => c.verified)) confidence += 0.1;
+      if (letterTemplate.citationsInLetter.some(c => c.verified)) confidence += 0.1;
       if (appealLevel === 'first_level') confidence += 0.1;
-      confidence = Math.min(confidence, 0.85); // Cap lower for appeals — inherently uncertain
+      if (aiGenerated && crossValidated) confidence += 0.05; // Small boost for cross-validated AI
+      confidence = Math.min(confidence, 0.85);
 
       const requiresHumanReview = true; // ALL appeals require human review before submission
 
@@ -377,23 +446,20 @@ export class AppealAgent extends BaseAgentV2 {
             ? 'Request independent external review per applicable state/federal regulations'
             : 'Consider legal options or contact state insurance commissioner',
         },
-        letterTemplate: {
-          templateType: template.type,
-          subject: template.subject,
-          body: template.body,
-          fillInFields: template.fillInFields,
-          citationsInLetter,
-          disclaimer: template.disclaimer,
-        },
+        letterTemplate,
         confidenceScore: confidence,
         requiresHumanReview,
-        humanReviewReason: 'All appeal letters must be reviewed by qualified staff before submission. Verify all citations, patient information, and factual claims.',
+        humanReviewReason: aiGenerated
+          ? crossValidated
+            ? 'AI-generated appeal letter cross-validated by multiple models. Must be reviewed by qualified staff before submission. Verify all citations and factual claims.'
+            : 'AI-generated appeal letter must be reviewed by qualified staff before submission. Verify all citations and factual claims.'
+          : 'All appeal letters must be reviewed by qualified staff before submission. Verify all citations, patient information, and factual claims.',
       };
 
       // Remember appeal pattern
       await this.remember(
         `appeal:${payerName}:${carcCode}:${appealLevel}`,
-        { strategy: result.strategy.approach, estimatedSuccess: result.strategy.estimatedSuccessRate },
+        { strategy: result.strategy.approach, estimatedSuccess: result.strategy.estimatedSuccessRate, aiGenerated, crossValidated },
         'pattern',
         confidence,
       );
@@ -409,6 +475,26 @@ export class AppealAgent extends BaseAgentV2 {
     });
   }
 
+  // ─── TEMPLATE FALLBACK ───────────────────────────────────────────────────
+
+  private getTemplateLetter(denialCategory: string, codingInfo: any): AppealOutput['letterTemplate'] {
+    const templateKey = LETTER_TEMPLATES[denialCategory] ? denialCategory : 'default';
+    const template = LETTER_TEMPLATES[templateKey];
+    const citationsInLetter = this.getCitationsForLetter(denialCategory, codingInfo);
+
+    return {
+      templateType: template.type,
+      subject: template.subject,
+      body: template.body,
+      fillInFields: template.fillInFields,
+      citationsInLetter,
+      disclaimer: template.disclaimer,
+      aiGenerated: false,
+      crossValidated: false,
+      providerOpinions: null,
+    };
+  }
+
   // ─── CITATION METHODS (VERIFIED SOURCES ONLY) ────────────────────────
 
   private buildArgumentsWithCitations(
@@ -418,7 +504,6 @@ export class AppealAgent extends BaseAgentV2 {
   ): AppealOutput['strategy']['keyArguments'] {
     const argumentsList: AppealOutput['strategy']['keyArguments'] = [];
 
-    // Find applicable citations from our VERIFIED database
     const applicableCitations = VERIFIED_CITATIONS.filter(c =>
       c.applicableCategories.includes(category)
     );
@@ -441,7 +526,7 @@ export class AppealAgent extends BaseAgentV2 {
 
       argumentsList.push({
         argument: 'Conservative treatment was attempted and failed prior to the denied service.',
-        citation: null, // No specific regulation — must be supported by medical records
+        citation: null,
         citationType: 'none',
         confidenceInCitation: 0,
       });
@@ -468,7 +553,6 @@ export class AppealAgent extends BaseAgentV2 {
       });
     }
 
-    // If no citations found, add a "manual research needed" flag
     if (argumentsList.every(a => a.citation === null)) {
       argumentsList.push({
         argument: 'Manual research needed: No verified citations found in database for this denial category. Staff must research applicable regulations before submitting appeal.',
@@ -493,11 +577,10 @@ export class AppealAgent extends BaseAgentV2 {
         claim: citation.description,
         source: citation.reference,
         sourceType: citation.type,
-        verified: true, // From our verified database
+        verified: true,
       });
     }
 
-    // Add LCD if available
     const lcdRef = codingInfo?.coverage?.lcdReference;
     if (lcdRef) {
       citations.push({
