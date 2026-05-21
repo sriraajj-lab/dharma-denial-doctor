@@ -607,6 +607,7 @@ export class Brain {
 
   /**
    * Azure OpenAI (GPT-4o) — Primary provider for reasoning-heavy tasks.
+   * Supports both deployment-based and serverless endpoint formats.
    */
   private async callAzureOpenAI(
     systemPrompt: string,
@@ -622,10 +623,20 @@ export class Brain {
       throw new Error('Azure OpenAI not configured. Set AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT.');
     }
 
-    // Build the endpoint URL
+    // Build the endpoint URL — handle multiple Azure endpoint formats
     let url = endpoint;
+
+    // If the endpoint already includes /chat/completions, use it as-is
     if (!url.includes('/chat/completions')) {
-      url = url.endsWith('/') ? `${url}openai/deployments/${model}/chat/completions?api-version=${apiVersion}` : `${url}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
+      // Check if this is a base resource URL (e.g., https://xxx.services.ai.azure.com)
+      if (url.includes('.services.ai.azure.com') || url.includes('.openai.azure.com')) {
+        // Azure AI Services / Azure OpenAI resource URL — add deployment path
+        const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+        url = `${baseUrl}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
+      } else {
+        // Assume it's a complete endpoint URL
+        url = url.endsWith('/') ? `${url}openai/deployments/${model}/chat/completions?api-version=${apiVersion}` : `${url}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
+      }
     }
 
     const response = await fetch(url, {
@@ -952,8 +963,12 @@ export class Brain {
   }
 
   private getPrimaryProvider(): AIProvider {
-    if (this.azureAvailable) return 'azure-openai';
+    // Priority: z-ai-sdk is most reliable (always works), then Azure, then Anthropic
+    // Azure requires deployment to be created in portal first
+    // z-ai-sdk is always available and works out of the box
+    if (this.azureAvailable && process.env.AZURE_OPENAI_DEPLOYMENT_READY === 'true') return 'azure-openai';
     if (this.anthropicAvailable) return 'anthropic';
+    if (this.azureAvailable) return 'azure-openai'; // Try Azure even without deployment flag
     return 'z-ai-sdk';
   }
 
