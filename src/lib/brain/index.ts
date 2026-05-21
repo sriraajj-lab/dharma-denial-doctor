@@ -763,6 +763,7 @@ export class Brain {
   /**
    * z-ai-web-dev-sdk — Built-in fallback provider.
    * Always available, no external API keys needed.
+   * Reads config from /etc/.z-ai-config, project dir, or home dir.
    */
   private async callZAISDK(
     systemPrompt: string,
@@ -771,7 +772,35 @@ export class Brain {
   ): Promise<string> {
     try {
       const ZAI = (await import('z-ai-web-dev-sdk')).default;
-      const zai = await ZAI.create();
+
+      // Try to create with existing config, or with explicit config
+      let zai;
+      try {
+        zai = await ZAI.create();
+      } catch {
+        // If default config not found, try with explicit config from env or well-known paths
+        const fs = await import('fs');
+        const path = await import('path');
+
+        let configPath = '';
+        for (const p of ['/etc/.z-ai-config', path.join(process.cwd(), '.z-ai-config'), path.join(process.env.HOME || '/root', '.z-ai-config')]) {
+          try {
+            if (fs.existsSync(p)) {
+              configPath = p;
+              break;
+            }
+          } catch {
+            // Continue
+          }
+        }
+
+        if (configPath) {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+          zai = await ZAI.create(config);
+        } else {
+          throw new Error('No z-ai-config found and no default config available');
+        }
+      }
 
       const completion = await zai.chat.completions.create({
         messages: [
