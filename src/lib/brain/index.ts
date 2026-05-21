@@ -34,9 +34,10 @@
  * - ALL AI-generated corrections marked source: 'ai_generated' + riskLevel: 'high'
  *
  * Provider Priority:
- * 1. Azure OpenAI (GPT-4o) — if AZURE_OPENAI_API_KEY configured
- * 2. Anthropic Claude — if ANTHROPIC_API_KEY configured
- * 3. z-ai-web-dev-sdk — always available as fallback
+ * 1. Azure OpenAI (GPT-5.5) — if AZURE_OPENAI_API_KEY configured
+ * 2. Azure Anthropic (Claude) — if AZURE_ANTHROPIC_ENDPOINT configured
+ * 3. Direct Anthropic Claude — if ANTHROPIC_API_KEY configured
+ * 4. z-ai-web-dev-sdk — only available in development environment
  *
  * CRITICAL: This module MUST be used server-side only (API routes / backend).
  * Never expose API keys or call AI from client-side code.
@@ -163,7 +164,7 @@ export interface BrainResult {
 // ─── COST TRACKING ─────────────────────────────────────────────────────────────
 
 const COST_PER_1K_TOKENS: Record<AIProvider, { input: number; output: number }> = {
-  'azure-openai': { input: 0.0025, output: 0.01 },      // GPT-4o pricing
+  'azure-openai': { input: 0.01, output: 0.03 },           // GPT-5.5 pricing
   'anthropic': { input: 0.003, output: 0.015 },          // Claude 3.5 Sonnet
   'z-ai-sdk': { input: 0, output: 0 },                    // Internal SDK
   'rule-based': { input: 0, output: 0 },                   // No cost
@@ -200,6 +201,8 @@ export class Brain {
   private config: BrainConfig;
   private azureAvailable: boolean = false;
   private anthropicAvailable: boolean = false;
+  private azureAnthropicAvailable: boolean = false;
+  private zaiSdkAvailable: boolean = false;
 
   constructor(config?: Partial<BrainConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -209,8 +212,31 @@ export class Brain {
     const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT || this.config.azure?.endpoint;
     this.azureAvailable = !!(azureKey && azureEndpoint);
 
+    // Check Azure Anthropic (Claude via Azure) — uses same Azure API key
+    const azureAnthropicEndpoint = process.env.AZURE_ANTHROPIC_ENDPOINT;
+    this.azureAnthropicAvailable = !!(azureAnthropicEndpoint && azureKey);
+
+    // Also check direct Anthropic API
     const anthropicKey = process.env.ANTHROPIC_API_KEY || this.config.anthropic?.apiKey;
-    this.anthropicAvailable = !!anthropicKey;
+    this.anthropicAvailable = !!anthropicKey || this.azureAnthropicAvailable;
+
+    // z-ai-sdk is only available in development environment (not on Vercel)
+    // It requires /etc/.z-ai-config or similar config file
+    const isVercel = !!process.env.VERCEL;
+    if (!isVercel) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        for (const p of ['/etc/.z-ai-config', path.join(process.cwd(), '.z-ai-config'), path.join(process.env.HOME || '/root', '.z-ai-config')]) {
+          if (fs.existsSync(p)) {
+            this.zaiSdkAvailable = true;
+            break;
+          }
+        }
+      } catch {
+        this.zaiSdkAvailable = false;
+      }
+    }
   }
 
   /**
@@ -606,8 +632,9 @@ export class Brain {
   }
 
   /**
-   * Azure OpenAI (GPT-4o) — Primary provider for reasoning-heavy tasks.
+   * Azure OpenAI (GPT-5.5) — Primary provider for reasoning-heavy tasks.
    * Supports both deployment-based and serverless endpoint formats.
+   * Newer models (GPT-5.x, o-series) use max_completion_tokens instead of max_tokens.
    */
   private async callAzureOpenAI(
     systemPrompt: string,
@@ -616,62 +643,118 @@ export class Brain {
   ): Promise<string> {
     const apiKey = process.env.AZURE_OPENAI_API_KEY || this.config.azure?.apiKey;
     const endpoint = process.env.AZURE_OPENAI_ENDPOINT || this.config.azure?.endpoint;
-    const model = process.env.AZURE_OPENAI_MODEL || this.config.azure?.model || 'gpt-4o';
-    const apiVersion = process.env.AZURE_OPENAI_API_VERSION || this.config.azure?.apiVersion || '2024-08-01-preview';
+    const model = process.env.AZURE_OPENAI_MODEL || this.config.azure?.model || 'gpt-5.5';
+    const apiVersion = process.env.AZURE_OPENAI_API_VERSION || this.config.azure?.apiVersion || '2025-04-01-preview';
 
     if (!apiKey || !endpoint) {
       throw new Error('Azure OpenAI not configured. Set AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT.');
     }
 
     // Build the endpoint URL — handle multiple Azure endpoint formats
-    let url = endpoint;
+    const baseUrl = endpoint.replace(/\/openai\/.*$/, '').replace(/\/+$/, '');
 
-    // If the endpoint already includes /chat/completions, use it as-is
-    if (!url.includes('/chat/completions')) {
-      // Check if this is a base resource URL (e.g., https://xxx.services.ai.azure.com)
-      if (url.includes('.services.ai.azure.com') || url.includes('.openai.azure.com')) {
-        // Azure AI Services / Azure OpenAI resource URL — add deployment path
-        const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-        url = `${baseUrl}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
-      } else {
-        // Assume it's a complete endpoint URL
-        url = url.endsWith('/') ? `${url}openai/deployments/${model}/chat/completions?api-version=${apiVersion}` : `${url}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
-      }
+    // Determine API style: GPT-5.x and o-series use Responses API; others use Chat Completions
+    const usesResponsesAPI = /^(gpt-5|o1|o3|o4)/.test(model);
+    let url: string;
+
+    if (usesResponsesAPI) {
+      // Responses API (GPT-5.x, o-series) — uses /openai/responses endpoint
+      url = `${baseUrl}/openai/responses?api-version=${apiVersion}`;
+    } else if (url !== endpoint && (endpoint.includes('.services.ai.azure.com') || endpoint.includes('.openai.azure.com'))) {
+      // Azure AI Services / Azure OpenAI resource URL — add deployment path
+      url = `${baseUrl}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
+    } else {
+      // Assume it's a complete endpoint URL or base URL
+      url = `${baseUrl}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
-        max_tokens: options.maxTokens,
-        temperature: options.temperature,
-        ...(options.outputFormat === 'json' && { response_format: { type: 'json_object' } }),
-      }),
-      signal: AbortSignal.timeout(this.config.timeout),
-    });
+    let response: Response;
+
+    if (usesResponsesAPI) {
+      // ── Responses API body (GPT-5.x, o-series) ──
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          input: [
+            { role: 'user', content: userMessage },
+          ],
+          instructions: systemPrompt,
+          max_completion_tokens: options.maxTokens,
+          ...(options.outputFormat === 'json' && { text: { format: { type: 'json_object' } } }),
+        }),
+        signal: AbortSignal.timeout(this.config.timeout),
+      });
+    } else {
+      // ── Chat Completions API body (GPT-4o, DeepSeek, Grok, etc.) ──
+      const usesMaxCompletionTokens = /^(gpt-4\.5|gpt-5|o1|o3|o4)/.test(model);
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          ...(usesMaxCompletionTokens
+            ? { max_completion_tokens: options.maxTokens }
+            : { max_tokens: options.maxTokens, temperature: options.temperature }
+          ),
+          ...(options.outputFormat === 'json' && { response_format: { type: 'json_object' } }),
+        }),
+        signal: AbortSignal.timeout(this.config.timeout),
+      });
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Azure OpenAI API error: ${response.status} - ${errorText}`);
+      // If Responses API fails, try Chat Completions as fallback
+      if (usesResponsesAPI) {
+        console.warn(`[Brain] Responses API failed (${response.status}), falling back to Chat Completions for model ${model}`);
+        const fallbackUrl = `${baseUrl}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
+        const fallbackResponse = await fetch(fallbackUrl, {
+          method: 'POST',
+          headers: {
+            'api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userMessage },
+            ],
+            max_completion_tokens: options.maxTokens,
+            ...(options.outputFormat === 'json' && { response_format: { type: 'json_object' } }),
+          }),
+          signal: AbortSignal.timeout(this.config.timeout),
+        });
+        if (!fallbackResponse.ok) {
+          const fallbackError = await fallbackResponse.text();
+          throw new Error(`Azure OpenAI API error (both APIs): Responses=${response.status}, Chat=${fallbackResponse.status} - ${fallbackError}`);
+        }
+        response = fallbackResponse;
+      } else {
+        throw new Error(`Azure OpenAI API error: ${response.status} - ${errorText}`);
+      }
     }
 
     const data = await response.json();
 
-    // Handle both OpenAI response format and Azure Responses API format
+    // Handle both Chat Completions and Responses API formats
     let resultText = '';
 
-    // Standard OpenAI format
+    // Standard Chat Completions format
     if (data.choices?.[0]?.message?.content) {
       resultText = data.choices[0].message.content;
     }
-    // Azure Responses API format (from original azure-openai.ts)
+    // Responses API format (GPT-5.x)
     else if (data.output && Array.isArray(data.output)) {
       for (const item of data.output) {
         if (item.type === 'message' && item.content) {
@@ -683,6 +766,10 @@ export class Brain {
         }
       }
     }
+    // Responses API — output_text at top level
+    else if (data.output_text) {
+      resultText = data.output_text;
+    }
 
     if (!resultText) {
       throw new Error('Unable to extract text from Azure OpenAI response');
@@ -690,7 +777,9 @@ export class Brain {
 
     // Track costs
     if (this.config.trackCosts && data.usage) {
-      recordCost('azure-openai', 'general', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+      const promptTokens = data.usage.prompt_tokens || data.usage.input_tokens || 0;
+      const completionTokens = data.usage.completion_tokens || data.usage.output_tokens || 0;
+      recordCost('azure-openai', 'general', promptTokens, completionTokens);
     }
 
     return resultText;
@@ -699,17 +788,27 @@ export class Brain {
   /**
    * Anthropic Claude — Secondary provider for cross-validation.
    * Excellent at nuanced reasoning, regulatory interpretation, and careful analysis.
+   * Supports both Azure-hosted Claude and direct Anthropic API.
    */
   private async callAnthropic(
     systemPrompt: string,
     userMessage: string,
     options: { maxTokens: number; temperature: number; outputFormat: string },
   ): Promise<string> {
+    // Check for Azure-hosted Claude first
+    const azureAnthropicEndpoint = process.env.AZURE_ANTHROPIC_ENDPOINT;
+    const azureApiKey = process.env.AZURE_OPENAI_API_KEY || this.config.azure?.apiKey;
+
+    if (azureAnthropicEndpoint && azureApiKey) {
+      return this.callAzureAnthropic(systemPrompt, userMessage, options, azureAnthropicEndpoint, azureApiKey);
+    }
+
+    // Fall back to direct Anthropic API
     const apiKey = process.env.ANTHROPIC_API_KEY || this.config.anthropic?.apiKey;
     const model = process.env.ANTHROPIC_MODEL || this.config.anthropic?.model || 'claude-sonnet-4-20250514';
 
     if (!apiKey) {
-      throw new Error('Anthropic not configured. Set ANTHROPIC_API_KEY.');
+      throw new Error('Anthropic not configured. Set ANTHROPIC_API_KEY or AZURE_ANTHROPIC_ENDPOINT.');
     }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -750,6 +849,71 @@ export class Brain {
 
     if (!resultText) {
       throw new Error('Unable to extract text from Anthropic response');
+    }
+
+    // Track costs
+    if (this.config.trackCosts && data.usage) {
+      recordCost('anthropic', 'general', data.usage.input_tokens || 0, data.usage.output_tokens || 0);
+    }
+
+    return resultText;
+  }
+
+  /**
+   * Azure-hosted Anthropic Claude — Uses Azure endpoint instead of api.anthropic.com.
+   * Auth uses the same Azure OpenAI API key with x-api-key header.
+   */
+  private async callAzureAnthropic(
+    systemPrompt: string,
+    userMessage: string,
+    options: { maxTokens: number; temperature: number; outputFormat: string },
+    azureEndpoint: string,
+    apiKey: string,
+  ): Promise<string> {
+    const model = process.env.AZURE_ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+
+    // Build Azure Anthropic endpoint URL
+    const baseUrl = azureEndpoint.endsWith('/') ? azureEndpoint.slice(0, -1) : azureEndpoint;
+    const url = `${baseUrl}/v1/messages`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: options.maxTokens,
+        temperature: options.temperature,
+        system: systemPrompt,
+        messages: [
+          { role: 'user', content: userMessage },
+        ],
+      }),
+      signal: AbortSignal.timeout(this.config.timeout),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Azure Anthropic API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    // Extract text from Claude's response
+    let resultText = '';
+    if (data.content && Array.isArray(data.content)) {
+      for (const block of data.content) {
+        if (block.type === 'text') {
+          resultText += block.text;
+        }
+      }
+    }
+
+    if (!resultText) {
+      throw new Error('Unable to extract text from Azure Anthropic response');
     }
 
     // Track costs
@@ -986,19 +1150,20 @@ export class Brain {
     const providers: AIProvider[] = [];
     if (this.azureAvailable) providers.push('azure-openai');
     if (this.anthropicAvailable) providers.push('anthropic');
-    providers.push('z-ai-sdk'); // Always available
+    // z-ai-sdk is only available in development environment (not on Vercel)
+    if (this.zaiSdkAvailable) providers.push('z-ai-sdk');
     providers.push('rule-based'); // Always available
     return providers;
   }
 
   private getPrimaryProvider(): AIProvider {
-    // Priority: z-ai-sdk is most reliable (always works), then Azure, then Anthropic
-    // Azure requires deployment to be created in portal first
-    // z-ai-sdk is always available and works out of the box
-    if (this.azureAvailable && process.env.AZURE_OPENAI_DEPLOYMENT_READY === 'true') return 'azure-openai';
+    // Priority: Azure OpenAI is primary (most reliable with deployment),
+    // then Anthropic, then z-ai-sdk (dev only)
+    // No longer require AZURE_OPENAI_DEPLOYMENT_READY — just check if key + endpoint exist
+    if (this.azureAvailable) return 'azure-openai';
     if (this.anthropicAvailable) return 'anthropic';
-    if (this.azureAvailable) return 'azure-openai'; // Try Azure even without deployment flag
-    return 'z-ai-sdk';
+    if (this.zaiSdkAvailable) return 'z-ai-sdk';
+    return 'rule-based';
   }
 
   private getFallbackProvider(exclude: AIProvider): AIProvider | null {
@@ -1096,9 +1261,9 @@ export class Brain {
   getStatus(): { providers: Array<{ name: AIProvider; available: boolean; type: string }> } {
     return {
       providers: [
-        { name: 'azure-openai', available: this.azureAvailable, type: 'Primary (GPT-4o)' },
-        { name: 'anthropic', available: this.anthropicAvailable, type: 'Cross-validator (Claude)' },
-        { name: 'z-ai-sdk', available: true, type: 'Built-in fallback' },
+        { name: 'azure-openai', available: this.azureAvailable, type: this.azureAvailable ? 'Primary (GPT-5.5)' : 'Not configured' },
+        { name: 'anthropic', available: this.anthropicAvailable, type: this.azureAnthropicAvailable ? 'Azure-hosted (Claude)' : this.anthropicAvailable ? 'Direct (Claude)' : 'Not configured' },
+        { name: 'z-ai-sdk', available: this.zaiSdkAvailable, type: this.zaiSdkAvailable ? 'Dev environment fallback' : 'Not available (Vercel)' },
         { name: 'rule-based', available: true, type: 'Zero-hallucination fallback' },
       ],
     };
