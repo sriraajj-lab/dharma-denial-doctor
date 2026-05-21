@@ -1,10 +1,9 @@
 /**
- * Level-Gated Workflow Definitions
+ * Level-Gated Workflow Definitions — V2 (6-Agent Architecture)
  *
- * Defines structured workflows that enforce level access.
- * L1 gets Scan workflow only (diagnostic).
- * L2 gets full Triage → Analyze → Correct → QualityCheck → Appeal → FixReport pipeline.
- * L3 gets L2 + autonomous EHR integration (aspirational).
+ * L1: Demographics + Orchestrator (triage only)
+ * L2: Full pipeline — Orchestrator → Demographics → Eligibility → Coding (validation + generation) → Scrubber → Appeal
+ * L3: L2 + autonomous EHR integration (aspirational)
  */
 import { AccessLevel } from '../types';
 
@@ -32,12 +31,20 @@ export const L1_SCAN_WORKFLOW: WorkflowDefinition = {
   minLevel: 1,
   steps: [
     {
-      agent: 'triage-router',
+      agent: 'orchestrator-agent',
       task: 'triage',
       requiredLevel: 1,
       dependsOn: [],
       validationGate: true,
-      description: 'Classify denials and assign priorities',
+      description: 'Classify denial and determine which agents to route to',
+    },
+    {
+      agent: 'demographics-agent',
+      task: 'demographics_validation',
+      requiredLevel: 1,
+      dependsOn: ['triage'],
+      validationGate: true,
+      description: 'Validate patient demographics completeness',
     },
   ],
 };
@@ -47,11 +54,11 @@ export const L1_SCAN_WORKFLOW: WorkflowDefinition = {
 export const L2_FIX_WORKFLOW: WorkflowDefinition = {
   name: 'fix_and_appeal',
   description:
-    'Level 2: Analyze, correct, validate, generate appeals and fix report',
+    'Level 2: Analyze eligibility, coding (with AI code generation), scrub, and generate appeal strategies',
   minLevel: 2,
   steps: [
     {
-      agent: 'triage-router',
+      agent: 'orchestrator-agent',
       task: 'triage',
       requiredLevel: 1,
       dependsOn: [],
@@ -59,44 +66,52 @@ export const L2_FIX_WORKFLOW: WorkflowDefinition = {
       description: 'Classify denial and determine workflow',
     },
     {
-      agent: 'denial-analyzer',
-      task: 'analyze',
-      requiredLevel: 2,
+      agent: 'demographics-agent',
+      task: 'demographics_validation',
+      requiredLevel: 1,
       dependsOn: ['triage'],
       validationGate: true,
-      description: 'Deep analysis with root cause identification',
+      description: 'Validate demographics before deeper analysis',
     },
     {
-      agent: 'correction-engine',
-      task: 'correct',
+      agent: 'eligibility-agent',
+      task: 'eligibility_check',
       requiredLevel: 2,
-      dependsOn: ['analyze'],
+      dependsOn: ['demographics_validation'],
       validationGate: true,
-      description: 'Generate correction suggestions',
+      description: 'Verify eligibility, coverage, COB, and authorization',
     },
     {
-      agent: 'quality-checker',
-      task: 'quality_check',
+      agent: 'coding-agent',
+      task: 'coding_validation',
       requiredLevel: 2,
-      dependsOn: ['correct'],
+      dependsOn: ['demographics_validation'],
       validationGate: true,
-      description: 'Validate corrections before resubmission',
+      description: 'Validate CPT/ICD-10, NCCI edits, medical necessity',
     },
     {
-      agent: 'appeal-strategist',
-      task: 'appeal_strategy',
+      agent: 'coding-agent',
+      task: 'code_generation',
       requiredLevel: 2,
-      dependsOn: ['analyze'],
+      dependsOn: ['coding_validation'],
       validationGate: false,
-      description: 'Generate appeal strategy and letter',
+      description: 'Generate corrected CPT/ICD-10 codes when original codes are wrong (rule-based + AI)',
     },
     {
-      agent: 'root-cause-prevention',
-      task: 'root_cause_prevention',
+      agent: 'scrubber-agent',
+      task: 'pre_submission_check',
       requiredLevel: 2,
-      dependsOn: ['correct'],
+      dependsOn: ['coding_validation'],
+      validationGate: true,
+      description: 'Pre-submission scrub: payer ID, timely filing, duplicates',
+    },
+    {
+      agent: 'appeal-agent',
+      task: 'generate_appeal_strategy',
+      requiredLevel: 2,
+      dependsOn: ['coding_validation'],
       validationGate: false,
-      description: 'Learn from this denial to prevent future ones',
+      description: 'Generate appeal strategy with verified citations',
     },
   ],
 };
@@ -108,54 +123,15 @@ export const L3_AUTO_WORKFLOW: WorkflowDefinition = {
   description: 'Level 3: Full autonomous correction and resubmission via EHR',
   minLevel: 3,
   steps: [
-    {
-      agent: 'triage-router',
-      task: 'triage',
-      requiredLevel: 1,
-      dependsOn: [],
-      validationGate: true,
-      description: 'Classify denial and determine workflow',
-    },
-    {
-      agent: 'denial-analyzer',
-      task: 'analyze',
-      requiredLevel: 2,
-      dependsOn: ['triage'],
-      validationGate: true,
-      description: 'Deep analysis with root cause identification',
-    },
-    {
-      agent: 'correction-engine',
-      task: 'correct',
-      requiredLevel: 2,
-      dependsOn: ['analyze'],
-      validationGate: true,
-      description: 'Generate correction suggestions',
-    },
-    {
-      agent: 'quality-checker',
-      task: 'quality_check',
-      requiredLevel: 2,
-      dependsOn: ['correct'],
-      validationGate: true,
-      description: 'Validate corrections',
-    },
-    {
-      agent: 'appeal-strategist',
-      task: 'appeal_strategy',
-      requiredLevel: 2,
-      dependsOn: ['analyze'],
-      validationGate: false,
-      description: 'Appeal strategy',
-    },
+    ...L2_FIX_WORKFLOW.steps,
     // L3-only: EHR auto-submit (aspirational)
     {
-      agent: 'human-in-the-loop',
+      agent: 'orchestrator-agent',
       task: 'auto_submit',
       requiredLevel: 3,
-      dependsOn: ['quality_check'],
+      dependsOn: ['pre_submission_check'],
       validationGate: true,
-      description: 'Auto-submit corrected claim via EHR',
+      description: 'Auto-submit corrected claim via EHR integration',
     },
   ],
 };
@@ -166,69 +142,19 @@ export const SINGLE_AGENT_WORKFLOWS: Record<
   string,
   { agent: string; task: string; requiredLevel: AccessLevel }
 > = {
-  analyze: { agent: 'denial-analyzer', task: 'analyze', requiredLevel: 2 },
-  correct: { agent: 'correction-engine', task: 'correct', requiredLevel: 2 },
-  quality_check: {
-    agent: 'quality-checker',
-    task: 'quality_check',
-    requiredLevel: 2,
-  },
-  appeal_strategy: {
-    agent: 'appeal-strategist',
-    task: 'appeal_strategy',
-    requiredLevel: 2,
-  },
-  triage: { agent: 'triage-router', task: 'triage', requiredLevel: 1 },
-  evidence_retrieval: {
-    agent: 'evidence-retrieval',
-    task: 'evidence_retrieval',
-    requiredLevel: 2,
-  },
-  eligibility_check: {
-    agent: 'eligibility-cob',
-    task: 'eligibility_check',
-    requiredLevel: 2,
-  },
-  prior_auth: {
-    agent: 'prior-authorization',
-    task: 'prior_auth',
-    requiredLevel: 2,
-  },
-  medical_necessity: {
-    agent: 'medical-necessity',
-    task: 'medical_necessity',
-    requiredLevel: 2,
-  },
-  timely_filing_check: {
-    agent: 'timely-filing-watchdog',
-    task: 'timely_filing_check',
-    requiredLevel: 2,
-  },
-  underpayment_check: {
-    agent: 'underpayment-detector',
-    task: 'underpayment_check',
-    requiredLevel: 2,
-  },
-  root_cause_prevention: {
-    agent: 'root-cause-prevention',
-    task: 'root_cause_prevention',
-    requiredLevel: 2,
-  },
-  payer_behavior_learn: {
-    agent: 'payer-behavior-learner',
-    task: 'payer_behavior_learn',
-    requiredLevel: 2,
-  },
-  compliance_check: {
-    agent: 'compliance-audit',
-    task: 'compliance_check',
-    requiredLevel: 2,
-  },
-  human_approval: {
-    agent: 'human-in-the-loop',
-    task: 'human_approval',
-    requiredLevel: 2,
-  },
+  // 6 Functional Agents
+  triage: { agent: 'orchestrator-agent', task: 'triage', requiredLevel: 1 },
+  demographics_validation: { agent: 'demographics-agent', task: 'demographics_validation', requiredLevel: 1 },
+  eligibility_check: { agent: 'eligibility-agent', task: 'eligibility_check', requiredLevel: 2 },
+  cob_analysis: { agent: 'eligibility-agent', task: 'cob_analysis', requiredLevel: 2 },
+  coding_validation: { agent: 'coding-agent', task: 'coding_validation', requiredLevel: 2 },
+  code_generation: { agent: 'coding-agent', task: 'code_generation', requiredLevel: 2 },
+  pre_submission_check: { agent: 'scrubber-agent', task: 'pre_submission_check', requiredLevel: 2 },
+  timely_filing_check: { agent: 'scrubber-agent', task: 'timely_filing_check', requiredLevel: 2 },
+  underpayment_check: { agent: 'scrubber-agent', task: 'underpayment_check', requiredLevel: 2 },
+  duplicate_check: { agent: 'scrubber-agent', task: 'duplicate_check', requiredLevel: 2 },
+  generate_appeal_strategy: { agent: 'appeal-agent', task: 'generate_appeal_strategy', requiredLevel: 2 },
+  generate_appeal_letter: { agent: 'appeal-agent', task: 'generate_appeal_letter', requiredLevel: 2 },
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
